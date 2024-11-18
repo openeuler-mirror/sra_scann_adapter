@@ -19,6 +19,7 @@
 #include <string>
 
 #include <arm_neon.h>
+#include <arm_sve.h>
 
 #include "absl/strings/str_cat.h"
 #include "scann/utils/bits.h"

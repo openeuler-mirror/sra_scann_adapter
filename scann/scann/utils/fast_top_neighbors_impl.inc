@@ -166,11 +166,11 @@ SCANN_SIMD_OUTLINE size_t UseMasksToCompactDoublePorted(
 template <typename DistT, typename DatapointIndexT>
 SCANN_SIMD_INLINE size_t UseMasksToCompact(DatapointIndexT* indices,
                                            DistT* values, uint32_t* masks,
-                                           size_t n_masks) {
+                                           size_t n_masks, DistT threshold_value) {
   if (n_masks == 1) {
     return UseMaskToCompact(indices, values, masks[0]);
   }
-  return UseMasksToCompactDoublePorted(indices, values, masks, n_masks);
+  return UseMasksToCompactDoublePortedHelper(indices, values, masks, n_masks, threshold_value);
 }
 
 template <typename DatapointIndexT>
@@ -327,7 +327,7 @@ SCANN_SIMD_OUTLINE size_t ApproxNthElementImpl(size_t keep_min, size_t keep_max,
     SCANN_LOG_NOOP(INFO, kShouldLog) << StrFormat(
         "UseMasksToCompact; range:[%d,%d) = %d; masks=%d >= goal=%d;",
         n_already_kept, n_already_kept + sz, sz, n_kept, keep_min);
-    sz = UseMasksToCompact(indices, values, masks, n_masks);
+    sz = UseMasksToCompact(indices, values, masks, n_masks, threshold_value);
     DCHECK_EQ(sz, n_kept);
 
     if (n_kept > keep_max) {

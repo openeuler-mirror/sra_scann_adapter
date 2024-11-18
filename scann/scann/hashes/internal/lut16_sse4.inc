@@ -31,7 +31,7 @@ SCANN_SSE4_INLINE Sse4<int16_t, kNumQueries, 4> Sse4LUT16BottomLoop(
   uint16x8x4_t acc[kNumQueries];
   int16x8_t total_bias = vdupq_n_s16(num_blocks * 128);
   
-  hw_alg::Sse4LUT16BottomLoopExtract<kNumQueries>(acc,data_start,lookup_starts,num_blocks);
+  hw_alg::Sse4LUT16BottomLoopExtractNew<kNumQueries>(acc,data_start,lookup_starts,num_blocks);
   
   Sse4<int16_t, kNumQueries, 4> int16_accums = sse4::Zeros();
   for (size_t j : Seq(kNumQueries)) {
