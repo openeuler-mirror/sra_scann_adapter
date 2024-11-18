@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #include "scann/distance_measures/one_to_one/l2_distance_avx1.h"
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #include "scann/utils/intrinsics/avx1.h"
 
@@ -67,7 +67,7 @@ SCANN_AVX1_OUTLINE double DenseSquaredL2DistanceAvx1(
     bptr += 2;
   }
   __m128d sum = _mm_add_pd(upper, lower);
-  double result = sum[0] + sum[1];
+  double result = sum.vect_f64[0] + sum.vect_f64[1];
 
   if (aptr < aend) {
     const double to_square = *aptr - *bptr;

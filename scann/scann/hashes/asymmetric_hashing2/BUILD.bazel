@@ -105,11 +105,12 @@ cc_library(
 )
 
 cc_library(
-    name = "querying",
+    name = "querying", copts = ["-flto"], linkopts = ["-flto"],
     srcs = ["querying.cc"],
     hdrs = ["querying.h"],
     tags = ["local"],
     deps = [
+        "//scann/hw_alg:hw_alg",
         ":training",
         ":training_options",
         "//scann/base:restrict_allowlist",
@@ -132,7 +133,7 @@ cc_library(
 )
 
 cc_library(
-    name = "searcher",
+    name = "searcher", copts = ["-flto"], linkopts = ["-flto"],
     srcs = [
         "searcher.cc",
     ],

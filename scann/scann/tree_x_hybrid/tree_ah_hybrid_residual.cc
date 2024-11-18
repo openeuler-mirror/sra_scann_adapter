@@ -411,6 +411,22 @@ vector<std::vector<QueryForLeaf>> InvertCentersToSearch(
   return result;
 }
 
+vector<std::vector<QueryForLeaf>> InvertCentersToSearch(
+    ConstSpan<vector<KMeansTreeSearchResult>> centers_to_search,
+    size_t num_centers, vector<int>& pred_result) {
+  vector<std::vector<QueryForLeaf>> result(num_centers);
+  for (DatapointIndex query_index : IndicesOf(centers_to_search)) {
+    ConstSpan<KMeansTreeSearchResult> cur_query_centers =
+        centers_to_search[query_index];
+    // the prediction should less than the available result: pred_result[query_index] < cur_query_centers.size()
+    for (int i=0; i<pred_result[query_index]; i++) {
+      result[cur_query_centers[i].node->LeafId()].emplace_back(query_index,
+                                                cur_query_centers[i].distance_to_center);
+    }
+  }
+  return result;
+} 
+
 template <typename TopN>
 inline void AssignResults(TopN* top_n, NNResultsVector* results) {
   top_n->FinishUnsorted(results);
@@ -455,8 +471,22 @@ Status TreeAHHybridResidual::FindNeighborsBatchedImpl(
     }
     return OkStatus();
   }
-  auto queries_by_leaf =
+
+  std::vector<std::vector<QueryForLeaf>> queries_by_leaf;
+  if (pAdaptiveModel->GetMode() == IadpModel::AMODE::INFERENCE) {
+    std::vector<int> pred_result(queries.size());
+    vector<Entry> temp;
+    for (int i=0; i<queries.size(); i++) {
+      ADP_COLLECT_DATA_PRED(temp, centers_to_search[i]);
+      (void)pAdaptiveModel->PredictOne(temp, pred_result[i]);
+    }
+    queries_by_leaf =
+      InvertCentersToSearch(centers_to_search, query_tokenizer_->n_tokens(), pred_result);
+  } else {
+    queries_by_leaf =
       InvertCentersToSearch(centers_to_search, query_tokenizer_->n_tokens());
+  }
+
   vector<shared_ptr<const SearcherSpecificOptionalParameters>> lookup_tables(
       queries.size());
   for (size_t i : IndicesOf(queries)) {
@@ -666,5 +696,9 @@ void TreeAHHybridResidual::AttemptEnableGlobalTopN() {
   global_topn_shift_ = status_or_shift.value();
   enable_global_topn_ = true;
 }
-
+bool TreeAHHybridResidual::SearchCenters(const DatapointPtr<float>& query, 
+      const int num_centers, vector<KMeansTreeSearchResult> &centers_to_search) {
+    query_tokenizer_->TokensForDatapointWithSpilling(query, num_centers, &centers_to_search);
+    return true;
+}
 }  // namespace research_scann

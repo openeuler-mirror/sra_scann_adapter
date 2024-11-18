@@ -25,9 +25,9 @@
 #include "scann/utils/intrinsics/sse4.h"
 #include "scann/utils/types.h"
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
-#include <x86intrin.h>
+#include "avx2ki.h"
 
 namespace research_scann {
 namespace avx1 {

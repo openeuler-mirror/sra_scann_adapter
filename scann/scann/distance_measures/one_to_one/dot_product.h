@@ -168,7 +168,7 @@ double DenseDotProduct(const DatapointPtr<T>& a, const DatapointPtr<U>& b,
   return DenseDotProductFallback(a, b, c);
 }
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 template <>
 inline double DenseDotProduct<uint8_t, uint8_t>(

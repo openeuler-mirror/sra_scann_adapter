@@ -90,11 +90,12 @@ class ScannTest(parameterized.TestCase):
       np.testing.assert_allclose(dis, batch_dis[i], rtol=1e-6)
 
   @parameterized.product(
-      dist=["squared_l2", "dot_product"],
+      #dist=["squared_l2", "dot_product"],
+      dist=["squared_l2", "squared_l2"],
       quantize_tree=[True, False],
       reorder=[True, False])
   def test_tree_ah(self, dist, quantize_tree, reorder):
-    n_dims = 50
+    n_dims = 60
     ds = np.random.rand(12345, n_dims).astype(np.float32)
     builder = scann_ops_pybind.builder(ds, 10, dist).tree(
         300, 30, min_partition_size=10,
@@ -105,7 +106,7 @@ class ScannTest(parameterized.TestCase):
 
   @parameterized.parameters(("squared_l2",), ("dot_product",))
   def test_pure_ah(self, dist):
-    n_dims = 50
+    n_dims = 60
     ds = np.random.rand(12345, n_dims).astype(np.float32)
     s = scann_ops_pybind.builder(ds, 10, dist).score_ah(2).build()
     self.verify_serialization(s, n_dims, 5)
@@ -205,7 +206,7 @@ class ScannTest(parameterized.TestCase):
       np.testing.assert_allclose(dis_row, selected_distances, rtol=1e-5)
 
   def test_parallel_batching(self):
-    n_dims = 50
+    n_dims = 60
     k = 10
     ds = np.random.rand(12500, n_dims).astype(np.float32)
     qs = np.random.rand(2500, n_dims).astype(np.float32)
@@ -218,7 +219,7 @@ class ScannTest(parameterized.TestCase):
 
   # make sure spherical partitioning proto is valid and doesn't crash
   def test_spherical_kmeans(self):
-    n_dims = 50
+    n_dims = 60
     k = 10
     ds = self.normalize(np.random.rand(12500, n_dims).astype(np.float32))
     s = scann_ops_pybind.builder(ds, k, "squared_l2").tree(

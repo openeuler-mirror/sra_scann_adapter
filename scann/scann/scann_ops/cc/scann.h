@@ -59,7 +59,10 @@ class ScannInterface {
                        int pre_reorder_nn, int leaves) const;
   Status SearchBatchedParallel(const DenseDataset<float>& queries,
                                MutableSpan<NNResultsVector> res, int final_nn,
-                               int pre_reorder_nn, int leaves) const;
+                               int pre_reorder_nn, int leaves, int chosenBatchSize = 256) const;
+  void SearchAdditionalParams(float adp_threshold, int adp_refined, int leaves_to_search) const {
+      pAdaptiveModel->SetSearchParamsAndMode(adp_threshold, adp_refined, leaves_to_search);
+  };
   StatusOr<ScannAssets> Serialize(std::string path);
   StatusOr<SingleMachineFactoryOptions> ExtractOptions();
 
@@ -78,7 +81,13 @@ class ScannInterface {
   DimensionIndex dimensionality() const { return dimensionality_; }
   const ScannConfig* config() const { return &config_; }
 
+  void SetNumThreads(int num_threads) {
+    parallel_query_pool_ = StartThreadPool("ScannQueryingPool", num_threads);
+  }
+
  private:
+  void CollectTrainData(const float *pdata, int nb, int dim, int n_leaves, int nprobe);
+  void findTruth(std::vector<int64_t> &approximateGT, DenseDataset<float> &ptr, int qsize, int n_leaves);
   SearchParameters GetSearchParameters(int final_nn, int pre_reorder_nn,
                                        int leaves) const;
   vector<SearchParameters> GetSearchParametersBatched(

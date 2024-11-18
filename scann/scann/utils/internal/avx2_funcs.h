@@ -14,7 +14,7 @@
 
 #ifndef SCANN_UTILS_INTERNAL_AVX2_FUNCS_H_
 #define SCANN_UTILS_INTERNAL_AVX2_FUNCS_H_
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #include "scann/utils/intrinsics/avx2.h"
 #include "scann/utils/types.h"
@@ -59,7 +59,7 @@ class AvxFunctionsAvx2Fma {
     __m128 sum = _mm_add_ps(upper, lower);
     sum = _mm_add_ps(
         sum, _mm_castsi128_ps(_mm_srli_si128(_mm_castps_si128(sum), 8)));
-    return sum[0] + sum[1];
+    return _mm_extract_ps(sum, 0) + _mm_extract_ps(sum, 1);
   }
 };
 

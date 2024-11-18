@@ -105,7 +105,8 @@ class TreeAHHybridResidual final : public SingleMachineSearcherBase<float> {
   Status EnableCrowdingImpl(
       ConstSpan<int64_t> datapoint_index_to_crowding_attribute) final;
   void DisableCrowdingImpl() final;
-
+  bool SearchCenters(const DatapointPtr<float>& query,  
+        const int num_centers, vector<KMeansTreeSearchResult> &centers_to_search);
  private:
   class UnlockedTreeAHHybridResidualPreprocessingResults
       : public SearchParameters::UnlockedQueryPreprocessingResults {

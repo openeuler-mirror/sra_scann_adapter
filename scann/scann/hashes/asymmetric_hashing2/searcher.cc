@@ -98,7 +98,7 @@ Searcher<T>::Searcher(shared_ptr<TypedDataset<T>> dataset,
 
   if (lut16_) {
     packed_dataset_ =
-        ::research_scann::asymmetric_hashing2::CreatePackedDataset(
+        ::research_scann::asymmetric_hashing2::_CreatePackedDataset(
             *this->hashed_dataset());
 
     const size_t l2_cache_bytes = 256 * 1024;

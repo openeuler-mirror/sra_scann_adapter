@@ -7,7 +7,7 @@ package(
 # avoid excessive stack usage due to lack of compiler optimization.  This
 # avoids stack overflows in partner tests.
 cc_library(
-    name = "many_to_many",
+    name = "many_to_many", linkopts = ["-flto"],
     srcs = [
         "many_to_many_double_results.cc",
         "many_to_many_double_top1.cc",
@@ -19,7 +19,7 @@ cc_library(
         "many_to_many_templates.h",
     ],
     copts = [
-        "-O3",
+        "-O3", "-flto",
         "-Wno-pass-failed",
     ],
     tags = ["local"],

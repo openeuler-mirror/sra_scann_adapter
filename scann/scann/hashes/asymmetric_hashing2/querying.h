@@ -70,7 +70,7 @@ struct PackedDataset {
   DimensionIndex num_blocks = 0;
 };
 
-PackedDataset CreatePackedDataset(const DenseDataset<uint8_t>& hashed_database);
+PackedDataset _CreatePackedDataset(const DenseDataset<uint8_t>& hashed_database);
 
 DenseDataset<uint8_t> UnpackDataset(const PackedDataset& packed);
 
@@ -411,12 +411,11 @@ Status AsymmetricQueryer<T>::FindApproximateTopNeighborsTopNDispatch(
         "AsymmetricQueryer::FindApproximateNeighbors.");
   }
 
-  const bool can_use_lut16 =
-      RuntimeSupportsSse4() && querying_options.lut16_packed_dataset &&
-      !lookup_table.int8_lookup_table.empty() &&
-      lookup_table.int8_lookup_table.size() /
-              querying_options.lut16_packed_dataset->num_blocks ==
-          16;
+  const bool can_use_lut16 =true;
+      // RuntimeSupportsSse4() && querying_options.lut16_packed_dataset &&
+      // !lookup_table.int8_lookup_table.empty() &&
+      // (lookup_table.int8_lookup_table.size() /
+      //  querying_options.lut16_packed_dataset->num_blocks) == 16;
 
   if (can_use_lut16) {
     return FindApproximateNeighborsForceLUT16<TopN, Functor>(
@@ -453,11 +452,11 @@ Status AsymmetricQueryer<T>::FindApproximateTopNeighborsTopNDispatch(
                 "The distance type for TopN must be float for "
                 "AsymmetricQueryer::FindApproximateNeighbors.");
 
-  const bool can_use_lut16 =
-      RuntimeSupportsSse4() && querying_options.lut16_packed_dataset &&
-      !lookup_table.int8_lookup_table.empty() &&
-      (lookup_table.int8_lookup_table.size() /
-       querying_options.lut16_packed_dataset->num_blocks) == 16;
+  const bool can_use_lut16 =true;
+      // RuntimeSupportsSse4() && querying_options.lut16_packed_dataset &&
+      // !lookup_table.int8_lookup_table.empty() &&
+      // (lookup_table.int8_lookup_table.size() /
+      //  querying_options.lut16_packed_dataset->num_blocks) == 16;
   if (!can_use_lut16)
     return InvalidArgumentError(
         "FastTopNeighbors+AsymmetricQueryer fast path only works with LUT16.");
@@ -483,6 +482,7 @@ Status AsymmetricQueryer<T>::FindApproximateTopNeighborsTopNDispatch(
 
   asymmetric_hashing_internal::LUT16ArgsTopN<float> args;
   args.packed_dataset = packed_dataset.bit_packed_data.data();
+  __builtin_prefetch(args.packed_dataset + 8, 0, 0);
   args.num_32dp_simd_iters = DivRoundUp(packed_dataset.num_datapoints, 32);
   args.num_blocks = packed_dataset.num_blocks;
   args.lookups = lookups;

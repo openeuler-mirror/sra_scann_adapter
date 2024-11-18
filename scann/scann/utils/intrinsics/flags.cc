@@ -37,14 +37,10 @@ ABSL_RETIRED_FLAG(bool, ignore_sse4, false, "Ignore SSE4");
 namespace research_scann {
 namespace flags_internal {
 
-bool should_use_sse4 =
-    tensorflow::port::TestCPUFeature(tensorflow::port::SSE4_2);
+bool should_use_sse4 = true;
 bool should_use_avx1 = tensorflow::port::TestCPUFeature(tensorflow::port::AVX);
 bool should_use_avx2 = tensorflow::port::TestCPUFeature(tensorflow::port::AVX2);
-bool should_use_avx512 =
-    tensorflow::port::TestCPUFeature(tensorflow::port::AVX512F) &&
-    tensorflow::port::TestCPUFeature(tensorflow::port::AVX512DQ) &&
-    tensorflow::port::TestCPUFeature(tensorflow::port::AVX512BW);
+bool should_use_avx512 = true;
 
 }  // namespace flags_internal
 

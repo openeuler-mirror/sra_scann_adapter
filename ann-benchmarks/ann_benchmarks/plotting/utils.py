@@ -13,7 +13,7 @@ def get_or_create_metrics(run):
     return run["metrics"]
 
 
-def create_pointset(data, xn, yn):
+def create_pointset(data, xn, yn, p=False):
     xm, ym = (metrics[xn], metrics[yn])
     rev_y = -1 if ym["worst"] < 0 else 1
     rev_x = -1 if xm["worst"] < 0 else 1
@@ -35,6 +35,9 @@ def create_pointset(data, xn, yn):
             xs.append(xv)
             ys.append(yv)
             ls.append(algo_name)
+            if p:
+                print("Computing knn metrics")
+                print("select: %100s %12.10f %12.3f" % (algo_name, xv, yv))
     return xs, ys, ls, axs, ays, als
 
 
@@ -57,8 +60,10 @@ def compute_metrics(true_nn_distances, res, metric_1, metric_2, recompute=False)
         metric_2_value = metrics[metric_2]["function"](
             true_nn_distances, run_distances, metrics_cache, times, properties
         )
-
-        print("%3d: %80s %12.3f %12.3f" % (i, algo_name, metric_1_value, metric_2_value))
+        query_arguments = run.filename.removesuffix('.hdf5').split('/')[-1]
+        algo_name = algo_name + " " + query_arguments
+        print("%3d: %100s %12.3f %12.3f"
+              % (i, algo_name, metric_1_value, metric_2_value))
 
         all_results.setdefault(algo, []).append((algo, algo_name, metric_1_value, metric_2_value))
 

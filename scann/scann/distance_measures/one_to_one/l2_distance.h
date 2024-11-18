@@ -180,7 +180,7 @@ double DenseSquaredL2Distance(const DatapointPtr<T>& a,
   return DenseSquaredL2DistanceFallback(a, b);
 }
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 template <>
 inline double DenseSquaredL2Distance<uint8_t, uint8_t>(

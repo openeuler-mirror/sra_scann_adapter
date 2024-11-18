@@ -504,6 +504,8 @@ Status SingleMachineSearcherBase<T>::ReorderResults(
     } else {
       result->resize(0);
     }
+  } else if (kReorderHelper->GetMode() == KReorderHelperClass::PMODE::READY) {
+    kReorderHelper->ReorderOneToMany((const float*)(query.values()), result);
   } else {
     SCANN_RETURN_IF_ERROR(
         reordering_helper_->ComputeDistancesForReordering(query, result));

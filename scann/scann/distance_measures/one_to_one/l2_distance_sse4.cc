@@ -16,9 +16,10 @@
 
 #include <cstdint>
 #include <utility>
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #include "scann/utils/intrinsics/sse4.h"
+#include "scann/hw_alg/include/lut16_sse4.h"
 
 namespace research_scann {
 namespace l2_internal {
@@ -165,57 +166,63 @@ SCANN_SSE4_OUTLINE double DenseSquaredL2DistanceSse4(
   DCHECK(a.IsDense());
   DCHECK(b.IsDense());
 
-  auto get_terms = [](const float* aptr, const float* bptr)
-                       SCANN_SSE4_INLINE_LAMBDA {
-                         __m128 avals = _mm_loadu_ps(aptr);
-                         __m128 bvals = _mm_loadu_ps(bptr);
-                         __m128 diff = _mm_sub_ps(avals, bvals);
-                         return _mm_mul_ps(diff, diff);
-                       };
-
+  const int num_nonzero = a.nonzero_entries();
   const float* aptr = a.values();
   const float* bptr = b.values();
-  const float* aend = aptr + a.nonzero_entries();
-  __m128 accumulator = _mm_setzero_ps();
-  if (aptr + 8 <= aend) {
-    __m128 accumulator0 = get_terms(aptr, bptr);
-    __m128 accumulator1 = get_terms(aptr + 4, bptr + 4);
-    aptr += 8;
-    bptr += 8;
-    for (; aptr + 8 <= aend; aptr += 8, bptr += 8) {
-      accumulator0 = _mm_add_ps(accumulator0, get_terms(aptr, bptr));
-      accumulator1 = _mm_add_ps(accumulator1, get_terms(aptr + 4, bptr + 4));
+  if (num_nonzero <= 64) {
+    auto get_terms = [](const float* aptr, const float* bptr)
+                      SCANN_SSE4_INLINE_LAMBDA {
+                        __m128 avals = _mm_loadu_ps(aptr);
+                        __m128 bvals = _mm_loadu_ps(bptr);
+                        __m128 diff = _mm_sub_ps(avals, bvals);
+                        return _mm_mul_ps(diff, diff);
+                      };
+
+    const float* aend = aptr + num_nonzero;
+    __m128 accumulator = _mm_setzero_ps();
+    if (aptr + 8 <= aend) {
+      __m128 accumulator0 = get_terms(aptr, bptr);
+      __m128 accumulator1 = get_terms(aptr + 4, bptr + 4);
+      aptr += 8;
+      bptr += 8;
+      for (; aptr + 8 <= aend; aptr += 8, bptr += 8) {
+        accumulator0 = _mm_add_ps(accumulator0, get_terms(aptr, bptr));
+        accumulator1 = _mm_add_ps(accumulator1, get_terms(aptr + 4, bptr + 4));
+      }
+
+      accumulator = _mm_add_ps(accumulator0, accumulator1);
     }
 
-    accumulator = _mm_add_ps(accumulator0, accumulator1);
-  }
+    if (aptr + 4 <= aend) {
+      accumulator = _mm_add_ps(accumulator, get_terms(aptr, bptr));
+      aptr += 4;
+      bptr += 4;
+    }
 
-  if (aptr + 4 <= aend) {
-    accumulator = _mm_add_ps(accumulator, get_terms(aptr, bptr));
-    aptr += 4;
-    bptr += 4;
-  }
+    if (aptr + 2 <= aend) {
+      __m128 avals = _mm_setzero_ps();
+      __m128 bvals = _mm_setzero_ps();
+      avals = _mm_loadh_pi(avals, reinterpret_cast<const __m64*>(aptr));
+      bvals = _mm_loadh_pi(bvals, reinterpret_cast<const __m64*>(bptr));
+      __m128 diff = _mm_sub_ps(avals, bvals);
+      __m128 squared = _mm_mul_ps(diff, diff);
+      accumulator = _mm_add_ps(accumulator, squared);
+      aptr += 2;
+      bptr += 2;
+    }
 
-  if (aptr + 2 <= aend) {
-    __m128 avals = _mm_setzero_ps();
-    __m128 bvals = _mm_setzero_ps();
-    avals = _mm_loadh_pi(avals, reinterpret_cast<const __m64*>(aptr));
-    bvals = _mm_loadh_pi(bvals, reinterpret_cast<const __m64*>(bptr));
-    __m128 diff = _mm_sub_ps(avals, bvals);
-    __m128 squared = _mm_mul_ps(diff, diff);
-    accumulator = _mm_add_ps(accumulator, squared);
-    aptr += 2;
-    bptr += 2;
-  }
+    if (aptr < aend) {
+      accumulator.vect_f32[0] += (aptr[0] - bptr[0]) * (aptr[0] - bptr[0]);
+    }
 
-  if (aptr < aend) {
-    accumulator[0] += (aptr[0] - bptr[0]) * (aptr[0] - bptr[0]);
+    accumulator = _mm_hadd_ps(accumulator, accumulator);
+    accumulator = _mm_hadd_ps(accumulator, accumulator);
+    return accumulator.float32x4_ptr[0];
+  } else {
+    return hw_alg::DenseSquaredL2DistanceBatched<float>(aptr,bptr,num_nonzero);
   }
-
-  accumulator = _mm_hadd_ps(accumulator, accumulator);
-  accumulator = _mm_hadd_ps(accumulator, accumulator);
-  return accumulator[0];
 }
+
 
 SCANN_SSE4_OUTLINE double DenseSquaredL2DistanceSse4(
     const DatapointPtr<double>& a, const DatapointPtr<double>& b) {
@@ -255,7 +262,7 @@ SCANN_SSE4_OUTLINE double DenseSquaredL2DistanceSse4(
   }
 
   accumulator = _mm_hadd_pd(accumulator, accumulator);
-  double result = accumulator[0];
+  double result = accumulator.vect_f64[0];
 
   if (aptr < aend) {
     const double diff = *aptr - *bptr;

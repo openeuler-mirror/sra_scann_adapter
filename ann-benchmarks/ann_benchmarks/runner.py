@@ -18,8 +18,9 @@ from .datasets import DATASETS, get_dataset
 from .distance import dataset_transform, metrics
 from .results import store_results
 
+last_time = 0
 
-def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.array, distance: str, count: int, 
+def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.array, distance: str, count: int,
                          run_count: int, batch: bool) -> Tuple[dict, list]:
     """Run a search query using the provided algorithm and report the results.
 
@@ -41,9 +42,13 @@ def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.arra
 
     best_search_time = float("inf")
     for i in range(run_count):
+    #for i in range(run_count)[:1]:
         print("Run %d/%d..." % (i + 1, run_count))
         # a bit dumb but can't be a scalar since of Python's scoping rules
         n_items_processed = [0]
+        global last_time
+        last_time = time.time()
+
 
         def single_query(v: numpy.array) -> Tuple[float, List[Tuple[int, float]]]:
             """Executes a single query on an instantiated, ANN algorithm.
@@ -70,8 +75,10 @@ def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.arra
                 (int(idx), float(metrics[distance].distance(v, X_train[idx]))) for idx in candidates  # noqa
             ]
             n_items_processed[0] += 1
+            global last_time
             if n_items_processed[0] % 1000 == 0:
-                print("Processed %d/%d queries..." % (n_items_processed[0], len(X_test)))
+                print("Processed %d/%d queries... used " % (n_items_processed[0], len(X_test)), time.time() - last_time)
+                last_time = time.time()
             if len(candidates) > count:
                 print(
                     "warning: algorithm %s returned %d results, but count"
@@ -79,7 +86,7 @@ def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.arra
                 )
             return (total, candidates)
 
-        def batch_query(X: numpy.array) -> List[Tuple[float, List[Tuple[int, float]]]]:
+        def batch_query(X: numpy.array, multiple) -> List[Tuple[float, List[Tuple[int, float]]]]:
             """Executes a batch of queries on an instantiated, ANN algorithm.
 
             Args:
@@ -97,24 +104,25 @@ def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.arra
                 algo.run_batch_query()
                 total = time.time() - start
             else:
+                print(f"expanded {multiple} times, got {len(X) * multiple} queries")
+                X = numpy.tile(X, (multiple, 1))
                 start = time.time()
                 algo.batch_query(X, count)
                 total = time.time() - start
+                X = X[:int(len(X) / multiple)]
             results = algo.get_batch_results()
-            if hasattr(algo, "get_batch_latencies"):
-                batch_latencies = algo.get_batch_latencies()
-            else:
-                batch_latencies = [total / float(len(X))] * len(X)
+            results = results[:int(len(results) / multiple)]
             candidates = [
                 [(int(idx), float(metrics[distance].distance(v, X_train[idx]))) for idx in single_results]  # noqa
                 for v, single_results in zip(X, results)
             ]
-            return [(latency, v) for latency, v in zip(batch_latencies, candidates)]
+            return [(total / float(len(X) * multiple), v) for v in candidates]
 
         if batch:
-            results = batch_query(X_test)
+            results = batch_query(X_test, 400)  # expanded n times
         else:
             results = [single_query(x) for x in X_test]
+            #results = [single_query(x) for x in X_test[:5000]]
 
         total_time = sum(time for time, _ in results)
         total_candidates = sum(len(candidates) for _, candidates in results)
@@ -212,12 +220,14 @@ function"""
         build_time, index_size = build_index(algo, X_train)
 
         query_argument_groups = definition.query_argument_groups or [[]]  # Ensure at least one iteration
-
+        qps_list = []
         for pos, query_arguments in enumerate(query_argument_groups, 1):
             print(f"Running query argument group {pos} of {len(query_argument_groups)}...")
+            #if pos >= 6:
+            #    continue
             if query_arguments:
                 algo.set_query_arguments(*query_arguments)
-            
+
             descriptor, results = run_individual_query(algo, X_train, X_test, distance, count, run_count, batch)
 
             descriptor.update({
@@ -228,6 +238,13 @@ function"""
             })
 
             store_results(dataset_name, count, definition, query_arguments, descriptor, results, batch)
+            total_time = descriptor["best_search_time"] * len(X_test)
+            print("best_search_time = {}".format(total_time))
+            qps_list.append(1.0 / descriptor["best_search_time"])
+            print("QPS = {}\n".format(qps_list[-1]))
+        print("QPS list:")
+        for qps in qps_list:
+            print(qps)
     finally:
         algo.done()
 

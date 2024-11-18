@@ -15,7 +15,7 @@
 #ifndef SCANN_DISTANCE_MEASURES_ONE_TO_ONE_DOT_PRODUCT_SSE4_H_
 #define SCANN_DISTANCE_MEASURES_ONE_TO_ONE_DOT_PRODUCT_SSE4_H_
 #include <cstdint>
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #include "scann/data_format/datapoint.h"
 #include "scann/utils/intrinsics/attributes.h"

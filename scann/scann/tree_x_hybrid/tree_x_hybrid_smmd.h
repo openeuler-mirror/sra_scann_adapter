@@ -144,7 +144,8 @@ class TreeXHybridSMMD : public SingleMachineSearcherBase<T> {
   Status FindNeighborsBatchedImpl(
       const TypedDataset<T>& queries, ConstSpan<SearchParameters> params,
       MutableSpan<NNResultsVector> results) const final;
-
+  bool SearchCenters(const DatapointPtr<T>& query, 
+        const int num_centers, vector<KMeansTreeSearchResult> &centers_to_search);
  private:
   class CentersToSearch
       : public SearchParameters::UnlockedQueryPreprocessingResults {

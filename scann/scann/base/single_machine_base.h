@@ -36,6 +36,7 @@
 #include "scann/utils/types.h"
 #include "scann/utils/util_functions.h"
 #include "tensorflow/core/lib/core/errors.h"
+#include "scann/hw_alg/include/kscann.h"
 
 namespace research_scann {
 
@@ -322,6 +323,10 @@ class SingleMachineSearcherBase : public UntypedSingleMachineSearcherBase {
     return *reordering_helper_;
   }
 
+  virtual bool SearchCenters(const DatapointPtr<T>& query, 
+        const int num_centers, vector<KMeansTreeSearchResult> &centers_to_search){
+        return false;
+  }
  protected:
   SingleMachineSearcherBase() {}
 

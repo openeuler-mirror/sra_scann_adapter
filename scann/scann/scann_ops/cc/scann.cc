@@ -34,6 +34,7 @@
 #include "scann/utils/io_oss_wrapper.h"
 #include "scann/utils/scann_config_utils.h"
 #include "scann/utils/threads.h"
+#include "scann/hw_alg/include/lut16_sse4.h"
 
 namespace research_scann {
 namespace {
@@ -76,8 +77,9 @@ Status ScannInterface::Initialize(const std::string& config_pbtxt,
 
   SingleMachineFactoryOptions opts;
   ScannAssets assets;
-  SCANN_RETURN_IF_ERROR(ParseTextProto(&assets, scann_assets_pbtxt));
-
+  //LOG(INFO) << "before ParseTextProto" << std::endl;
+  SCANN_RETURN_IF_ERROR(ParseTextProto(&assets,scann_assets_pbtxt));
+  //LOG(INFO) << "ParseTextProto success" << std::endl;
   shared_ptr<DenseDataset<float>> dataset;
   auto fp = make_shared<PreQuantizedFixedPoint>();
   for (const ScannAsset& asset : assets.assets()) {
@@ -88,11 +90,38 @@ Status ScannInterface::Initialize(const std::string& config_pbtxt,
         SCANN_RETURN_IF_ERROR(
             ReadProtobufFromFile(asset_path, opts.ah_codebook.get()));
         break;
-      case ScannAsset::PARTITIONER:
+      case ScannAsset::PARTITIONER: {
         opts.serialized_partitioner = std::make_shared<SerializedPartitioner>();
         SCANN_RETURN_IF_ERROR(ReadProtobufFromFile(
             asset_path, opts.serialized_partitioner.get()));
+            
+        std::string target = "serialized_partitioner.pb";
+        std::string str(asset_path);
+        std::string replacement = "libadaptivemodel.so";
+        size_t pos = str.find(target);
+        if (pos != std::string::npos) {
+          str.replace(pos, target.length(), replacement);
+        }
+        pAdaptiveModel = adpModelFactory();
+        pAdaptiveModel->LoadLibrary(str);
+
+        std::string pipath(asset_path);
+        std::string pifn = "probe_info.npy";
+        pipath.replace(pos, target.length(), pifn);
+        
+        TF_ASSIGN_OR_RETURN(auto pi_vector_and_shape,
+                            NumpyToVectorAndShape<float>(pipath));
+        pAdaptiveModel->SetProbeInfo(pi_vector_and_shape.first);
+
+        std::string t75path(asset_path);
+        std::string t75fn = "train75p.npy";
+        t75path.replace(pos, target.length(), t75fn);
+        
+        TF_ASSIGN_OR_RETURN(auto t75_vector_and_shape,
+                            NumpyToVectorAndShape<int>(t75path));
+        pAdaptiveModel->SetTrain75p(t75_vector_and_shape.first[0]);
         break;
+      }
       case ScannAsset::TOKENIZATION_NPY: {
         TF_ASSIGN_OR_RETURN(auto vector_and_shape,
                             NumpyToVectorAndShape<int32_t>(asset_path));
@@ -203,6 +232,8 @@ Status ScannInterface::Initialize(shared_ptr<DenseDataset<float>> dataset,
       config_.partitioning().partitioning_type() ==
           PartitioningConfig::SPHERICAL)
     dataset->set_normalization_tag(research_scann::UNITL2NORM);
+
+  bool is_serialized = opts.serialized_partitioner != nullptr;
   TF_ASSIGN_OR_RETURN(scann_, SingleMachineFactoryScann<float>(
                                   config_, dataset, std::move(opts)));
 
@@ -213,15 +244,23 @@ Status ScannInterface::Initialize(shared_ptr<DenseDataset<float>> dataset,
   result_multiplier_ =
       negated_distances.find(distance) == negated_distances.end() ? 1 : -1;
 
+  parallel_query_pool_ = StartThreadPool("ScannQueryingPool", GetNumCPUs() - 1);
+
   if (config_.has_partitioning()) {
     min_batch_size_ = 1;
+    if (!is_serialized) {
+      std::cout << "----> new pAdaptiveModel and CollectTrainData" << std::endl;
+      pAdaptiveModel = adpModelFactory();
+      int n_leaves_tmp = config_.partitioning().num_children();
+      CollectTrainData(&dataset->data()[0], n_points_, dimensionality_, n_leaves_tmp, 50);
+    }
   } else {
     if (config_.has_hash())
       min_batch_size_ = 16;
     else
       min_batch_size_ = 256;
   }
-  parallel_query_pool_ = StartThreadPool("ScannQueryingPool", GetNumCPUs() - 1);
+  
   return OkStatus();
 }
 
@@ -300,12 +339,13 @@ Status ScannInterface::SearchBatched(const DenseDataset<float>& queries,
 Status ScannInterface::SearchBatchedParallel(const DenseDataset<float>& queries,
                                              MutableSpan<NNResultsVector> res,
                                              int final_nn, int pre_reorder_nn,
-                                             int leaves) const {
+                                             int leaves, int batch_size) const {
   const size_t numQueries = queries.size();
-  const size_t numCPUs = GetNumCPUs();
-
+  const size_t numCPUs = parallel_query_pool_->NumThreads() <= 0 ?
+                                 1 : parallel_query_pool_->NumThreads();
   const size_t kBatchSize = std::min(
-      std::max(min_batch_size_, DivRoundUp(numQueries, numCPUs)), 256ul);
+      std::max(min_batch_size_, DivRoundUp(numQueries, numCPUs)), static_cast<size_t>(batch_size));
+
   return ParallelForWithStatus<1>(
       Seq(DivRoundUp(numQueries, kBatchSize)), parallel_query_pool_.get(),
       [&](size_t i) {
@@ -342,6 +382,19 @@ StatusOr<ScannAssets> ScannInterface::Serialize(std::string path) {
     add_asset(fpath, ScannAsset::PARTITIONER);
     SCANN_RETURN_IF_ERROR(
         WriteProtobufToFile(fpath, opts.serialized_partitioner.get()));
+
+    std::string pipath = path + "/probe_info.npy";
+    SCANN_RETURN_IF_ERROR(
+        VectorToNumpy(pipath, pAdaptiveModel->GetProbeInfo()));
+
+    std::string t75path = path + "/train75p.npy";
+    std::vector<int> t75vec= {pAdaptiveModel->GetTrain75p()};
+    SCANN_RETURN_IF_ERROR(
+        VectorToNumpy(t75path, t75vec));
+
+    if (pAdaptiveModel->SaveLibrary(path)){
+      std::cout<< "Successfully saved model to " << path << std::endl;
+    }
   }
   if (opts.datapoints_by_token != nullptr) {
     vector<int32_t> datapoint_to_token(n_points_);
@@ -383,11 +436,109 @@ StatusOr<ScannAssets> ScannInterface::Serialize(std::string path) {
     add_asset(fpath, ScannAsset::DATASET_NPY);
     SCANN_RETURN_IF_ERROR(DatasetToNumpy(fpath, *dataset));
   }
+  std::string fpath = path + "/assets.pb";
+  SCANN_RETURN_IF_ERROR(WriteProtobufToFile(fpath, &assets));
   return assets;
 }
 
 StatusOr<SingleMachineFactoryOptions> ScannInterface::ExtractOptions() {
   return scann_->ExtractSingleMachineFactoryOptions();
+}
+
+void ScannInterface::findTruth(std::vector<int64_t> &approximateGT, DenseDataset<float> &ptr, int qsize, int n_leaves) {
+  NNResultsVector *res = new NNResultsVector[qsize];
+  SearchBatchedParallel(ptr, MutableSpan<NNResultsVector>(res, ptr.size()), 10, 1000, n_leaves);
+  for (int i = 0; i < qsize; ++i) {
+      for (auto &pir: res[i]) {
+          approximateGT.emplace_back(pir.first);
+      }
+  }
+}
+// scann has been Initialized
+void ScannInterface::CollectTrainData(const float *pdata, int nb, int dim, int n_leaves, int nprobe) {
+
+    auto CalFullRecall = [](int64_t *a, int64_t *b, int size) {
+      std::unordered_set<int64_t> s;
+      for (int i = 0; i < size; i++) {
+          s.insert(a[i]);
+          s.insert(b[i]);
+      }
+      return (float(size * 2 - s.size()) / float(size));
+    };
+
+    // normal search paramenters
+    int topK = 10;
+    const int actualProbe = nprobe;
+    int reorderMax = topK * 100;
+
+    // dataset characteristic parameters
+    const int nProbeMax = n_leaves;
+    int qsize = nb < 50000 ? nb : 50000;
+    pAdaptiveModel->SetMode(IadpModel::AMODE::COLLECT);
+
+    // build train query
+    DenseDataset<float> ptr(std::vector<float>(pdata, pdata + dim * qsize), qsize);
+    std::cout << "--> CollectTrainData" << std::endl;
+    // find ground truth using n_leaves
+    std::vector<int64_t> approximateGT;
+    findTruth(approximateGT, ptr, qsize, n_leaves);
+
+    // binary Search expectedNprobe
+    std::vector<int64_t> expectedNprobe(qsize);
+    const float maxRecall = 0.9999;
+    vector<vector<KMeansTreeSearchResult>> qcenters(qsize);
+    ParallelFor<1>(
+      Seq(qsize), parallel_query_pool_.get(), [&](size_t i) {
+        int npMin = 1;
+        int npMax = nProbeMax;
+        int curNprobe = (npMin + npMax) / 2;
+
+        std::vector<int64_t> temp_ids(topK);
+        int64_t * curGt = approximateGT.data() + i * topK;
+
+        DenseDataset<float> ptr2(std::vector<float>(pdata + dim * i, pdata + dim * i + dim * 1), 1);
+        NNResultsVector *res2 = new NNResultsVector[1];
+        // SearchBatched(ptr2, MutableSpan<NNResultsVector>(res2, ptr2.size()), topK, reorderMax, nProbeMax);
+        while (npMin <= npMax) {
+            curNprobe = (npMin + npMax) / 2;
+            SearchBatched(ptr2, MutableSpan<NNResultsVector>(res2, ptr2.size()), topK, reorderMax, curNprobe);
+            int idx = 0;
+            for (auto &pir: res2[0]) {
+                temp_ids[idx] = pir.first;
+                idx += 1;
+            }
+            float rate = CalFullRecall(&temp_ids[0], curGt, topK);
+            if (rate < maxRecall) {
+                npMin = curNprobe + 1;
+            } else if (rate > maxRecall) {
+                npMax = curNprobe - 1;
+            } else {
+                expectedNprobe[i] = curNprobe;
+            }
+        }
+        if (expectedNprobe[i] == 0) {
+            expectedNprobe[i] = npMax + 1;
+        }
+
+        DatapointPtr<float> query(nullptr, pdata + dim * i, dim, dim);
+        scann_->SearchCenters(query, actualProbe, qcenters[i]);
+    });
+
+    vector<vector<Entry>> fdata;
+    fdata.resize(qsize);
+    for (int i=0; i<qsize; i++) {
+        ADP_COLLECT_DATA(fdata[i], qcenters[i], actualProbe);
+    }
+
+    for(auto& i :qcenters){
+        vector<KMeansTreeSearchResult>().swap(i);
+    } 
+    vector<vector<KMeansTreeSearchResult>>().swap(qcenters);
+    vector<int64_t>().swap(approximateGT);
+
+    std::cout << "--> CollectTrainData trainModel" << std::endl;
+    pAdaptiveModel->trainModel(expectedNprobe, fdata, n_leaves);
+    pAdaptiveModel->SetMode(IadpModel::AMODE::DISABLE);
 }
 
 }  // namespace research_scann

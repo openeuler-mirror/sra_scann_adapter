@@ -655,48 +655,7 @@ bool CanUseInt16Accumulator(ConstSpan<uint8_t> lookup_table,
          sum_of_mins >= numeric_limits<int16_t>::min();
 }
 
-vector<uint8_t> CreatePackedDataset(
-    const DenseDataset<uint8_t>& hashed_database) {
-  vector<uint8_t> packed_dataset;
-  if (hashed_database.empty()) {
-    return packed_dataset;
-  }
-
-  DimensionIndex num_blocks = hashed_database[0].nonzero_entries();
-  packed_dataset.resize(num_blocks * ((hashed_database.size() + 31) & (~31)) /
-                        2);
-  DatapointIndex k = 0;
-  for (; k < hashed_database.size() / 32; ++k) {
-    size_t start = k * 16 * num_blocks;
-    for (size_t j = 0; j < num_blocks; ++j) {
-      for (size_t m = 0; m < 16; m++) {
-        uint8_t u0 = hashed_database[k * 32 + m].values()[j];
-        uint8_t u1 = hashed_database[k * 32 + m + 16].values()[j];
-        packed_dataset[start + j * 16 + m] = u1 * 16 + u0;
-      }
-    }
-  }
-
-  if (k * 32 < hashed_database.size()) {
-    size_t start = k * 16 * num_blocks;
-    for (size_t j = 0; j < num_blocks; ++j) {
-      for (size_t m = 0; m < 16; m++) {
-        DatapointIndex dp_idx = k * 32 + m;
-        dp_idx = dp_idx >= hashed_database.size() ? (hashed_database.size() - 1)
-                                                  : dp_idx;
-        uint8_t u0 = hashed_database[dp_idx].values()[j];
-
-        dp_idx = k * 32 + m + 16;
-        dp_idx = dp_idx >= hashed_database.size() ? (hashed_database.size() - 1)
-                                                  : dp_idx;
-        uint8_t u1 = hashed_database[dp_idx].values()[j];
-        packed_dataset[start + j * 16 + m] = u1 * 16 + u0;
-      }
-    }
-  }
-
-  return packed_dataset;
-}
+#include "scann/hw_alg/include/lut16dep_helper.h"
 
 template class UnrestrictedIndexIterator<6, IdentityPostprocessFunctor>;
 template class UnrestrictedIndexIterator<6, AddBiasFunctor>;

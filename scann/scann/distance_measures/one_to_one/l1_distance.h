@@ -100,7 +100,7 @@ double DenseL1Norm(const DatapointPtr<T>& a, const DatapointPtr<U>& b) {
   return DenseL1NormFallback(a, b);
 }
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 template <>
 inline double DenseL1Norm<float, float>(const DatapointPtr<float>& a,

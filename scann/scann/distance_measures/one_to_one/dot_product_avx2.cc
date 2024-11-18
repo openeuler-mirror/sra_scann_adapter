@@ -16,7 +16,7 @@
 
 #include <cstdint>
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #include "scann/data_format/datapoint.h"
 #include "scann/utils/internal/avx2_funcs.h"

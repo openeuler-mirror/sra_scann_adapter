@@ -68,6 +68,27 @@ class SingleMachineFactoryImplClass {
     auto* typed_searcher =
         down_cast<SingleMachineSearcherBase<T>*>(searcher.get());
 
+    kReorderHelper = KReorderHelperFactory();
+    const auto& distance_type = typeid(*(params.reordering_dist));
+    if constexpr (std::is_same_v<T, float>) {
+      auto exact_reordering_dataset = std::dynamic_pointer_cast<DenseDataset<T>>(dataset);
+      const size_t n_points = exact_reordering_dataset->size();
+      const size_t n_dims = exact_reordering_dataset->dimensionality();
+      ConstSpan<T> fp32_data = exact_reordering_dataset->data();
+      if (distance_type == typeid(const SquaredL2Distance)) {
+        kReorderHelper->Build(n_dims, KReorderHelperClass::K_DIS_MEASURE::SQUARED_L2);
+        kReorderHelper->TransformBase(fp32_data.data(), n_points);
+        std::cout<<"kReorderHelper Initialized \n";
+      }else if (distance_type == typeid(const DotProductDistance)){
+        kReorderHelper->Build(n_dims, KReorderHelperClass::K_DIS_MEASURE::DOT_PRODUCT);
+        kReorderHelper->TransformBase(fp32_data.data(), n_points);
+        std::cout<<"kReorderHelper Initialized \n";
+      }else {
+        kReorderHelper->Build(0, KReorderHelperClass::K_DIS_MEASURE::UNDEFINED);
+      }
+    }else {
+      kReorderHelper->Build(0, KReorderHelperClass::K_DIS_MEASURE::UNDEFINED);
+    }
     TF_ASSIGN_OR_RETURN(
         auto reordering_helper,
         ReorderingHelperFactory<T>::Build(config, params.reordering_dist,

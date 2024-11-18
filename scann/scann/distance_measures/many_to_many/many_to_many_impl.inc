@@ -34,7 +34,7 @@ SCANN_SIMD_INLINE void ExpandPretransposedFP8BlockImpl(
   if (n_to_transpose == kElementsPerRegister) {
     const int8_t* __restrict__ src = block.data();
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
     if constexpr (IsSame<Simd<FloatT>, Avx2<float>>()) {
       static_assert(kElementsPerRegister == 8);
@@ -42,9 +42,9 @@ SCANN_SIMD_INLINE void ExpandPretransposedFP8BlockImpl(
         __m256 inv_multiplier_simd = _mm256_broadcast_ss((
 
             inverse_multipliers_or_null + dim_idx));
-        __m128i int8s = _mm_loadl_pi(_mm_setzero_si128(),
+        __m128 int8s = _mm_loadl_pi(_mm_castsi128_ps(_mm_setzero_si128()),
                                      reinterpret_cast<const __m64*>(src));
-        __m256i int32s = _mm256_cvtepi8_epi32(int8s);
+        __m256i int32s = _mm256_cvtepi8_epi32(_mm_cvtps_epi32(int8s));
         __m256 floats = _mm256_cvtepi32_ps(int32s) * inv_multiplier_simd;
 
         _mm256_store_ps(transposed_storage, floats);

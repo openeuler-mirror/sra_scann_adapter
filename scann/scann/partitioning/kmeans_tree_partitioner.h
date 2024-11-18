@@ -30,7 +30,6 @@
 #include "scann/oss_wrappers/scann_status.h"
 #include "scann/oss_wrappers/scann_threadpool.h"
 #include "scann/partitioning/kmeans_tree_like_partitioner.h"
-#include "scann/partitioning/orthogonality_amplification_utils.h"
 #include "scann/partitioning/partitioner.pb.h"
 #include "scann/partitioning/partitioner_base.h"
 #include "scann/trees/kmeans_tree/kmeans_tree.h"

@@ -1,2 +1,6 @@
+h5py==3.8.0
+numpy==1.24.2
 tensorflow~=2.13.0
-numpy
+lightgbm
+treelite==4.2.1
+tl2cgen

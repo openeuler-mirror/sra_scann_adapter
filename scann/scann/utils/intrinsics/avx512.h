@@ -25,9 +25,9 @@
 #include "scann/utils/intrinsics/flags.h"
 #include "scann/utils/types.h"
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
-#include <x86intrin.h>
+#include "avx2ki.h"
 
 namespace research_scann {
 namespace avx512 {
@@ -150,7 +150,7 @@ class Avx512<T, kNumRegistersInferred> {
     if constexpr (IsSameAny<T, float>()) {
       return _mm512_setzero_ps();
     } else if constexpr (IsSameAny<T, double>()) {
-      return _mm512_setzero_ps();
+      return _mm512_setzero_pd();
     } else {
       return _mm512_setzero_si512();
     }
@@ -216,7 +216,7 @@ class Avx512<T, kNumRegistersInferred> {
       if constexpr (IsSameAny<T, float>()) {
         return _mm512_loadu_ps(reinterpret_cast<const __m512*>(address));
       } else if constexpr (IsSameAny<T, double>()) {
-        return _mm512_loadu_pd(reinterpret_cast<const __m512d*>(address));
+        return _mm512_loadu_pd(reinterpret_cast<const double*>(address));
       } else {
         return _mm512_loadu_si512(reinterpret_cast<const __m512i*>(address));
       }

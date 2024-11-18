@@ -154,7 +154,7 @@ class LUT16Interface {
       LOG(FATAL) << "Invalid Batch Size";                             \
   }
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #define SCANN_CALL_LUT16_FUNCTION(enable_avx512_codepath, batch_size,   \
                                   prefetch_strategy, Function, ...)     \

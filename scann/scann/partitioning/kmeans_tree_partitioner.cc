@@ -586,14 +586,31 @@ KMeansTreePartitioner<T>::TokensForDatapointWithSpillingBatchedAndOverride(
   vector<vector<KMeansTreeSearchResult>> raw_results(queries.size());
   SCANN_RETURN_IF_ERROR(TokensForDatapointWithSpillingBatched(
       queries, max_centers_override, MakeMutableSpan(raw_results)));
-  for (size_t i = 0; i < results.size(); ++i) {
-    vector<int32_t>& cur_results = results[i];
-    auto& cur_raw_results = raw_results[i];
-    cur_results.clear();
-    cur_results.reserve(cur_raw_results.size());
-    for (auto& elem : cur_raw_results) {
-      cur_results.push_back(elem.node->LeafId());
+  if (pAdaptiveModel->GetMode() == IadpModel::AMODE::INFERENCE) {
+    int pred = 0;
+    vector<Entry> temp;
+    for (size_t i = 0; i < results.size(); ++i) {
+      vector<int32_t>& cur_results = results[i];
+      auto& cur_raw_results = raw_results[i];
+      ADP_COLLECT_DATA_PRED(temp, cur_raw_results);
+      (void)pAdaptiveModel->PredictOne(temp, pred);
+  
+      cur_results.clear();
+      cur_results.reserve(cur_raw_results.size());
+      for (int j=0; j < pred; j++) {
+          cur_results.push_back(cur_raw_results[j].node->LeafId());
+      }
     }
+  } else {
+      for (size_t i = 0; i < results.size(); ++i) {
+        vector<int32_t>& cur_results = results[i];
+        auto& cur_raw_results = raw_results[i];
+        cur_results.clear();
+        cur_results.reserve(cur_raw_results.size());
+        for (int j=0; j<cur_raw_results.size(); j++) {
+            cur_results.push_back(cur_raw_results[j].node->LeafId());
+        }
+      }
   }
   return OkStatus();
 }

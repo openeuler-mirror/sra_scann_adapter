@@ -1,0 +1,16 @@
+float:
+  euclidean:
+  - base_args: {}
+    constructor: Scann
+    disabled: false
+    docker_tag: ann-benchmarks-scann
+    module: ann_benchmarks.algorithms.scann
+    name: scann
+    run_groups:
+      scann1:
+        args: [[100], [.nan], [4], [squared_l2]]
+        query_args: [[ #[3, 20, 0, 0], 
+                      #[4, 30, 0, 0], 
+                      #[8, 80, 0, 0],
+                      [9, 80, 0.25, 3, 50, 320],                      
+                    ]]

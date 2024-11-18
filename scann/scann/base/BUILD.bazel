@@ -3,8 +3,16 @@ package(
     licenses = ["notice"],
 )
 
+cc_import(
+    name = "hw_alg",
+    hdrs = [
+        "//scann/hw_alg/include/kscann.h",
+    ],
+    shared_library = "//scann/hw_alg/lib/libkscann.so",
+)
+
 cc_library(
-    name = "single_machine_factory_scann",
+    name = "single_machine_factory_scann", copts = ["-flto"], linkopts = ["-flto"],
     srcs = ["single_machine_factory_scann.cc"],
     hdrs = ["single_machine_factory_scann.h"],
     tags = ["local"],
@@ -46,7 +54,7 @@ cc_library(
 )
 
 cc_library(
-    name = "reordering_helper_factory",
+    name = "reordering_helper_factory", copts = ["-flto"], linkopts = ["-flto"],
     srcs = ["reordering_helper_factory.cc"],
     hdrs = ["reordering_helper_factory.h"],
     tags = ["local"],
@@ -69,7 +77,7 @@ cc_library(
 )
 
 cc_library(
-    name = "single_machine_factory_options",
+    name = "single_machine_factory_options", copts = ["-flto"], linkopts = ["-flto"],
     srcs = ["single_machine_factory_options.cc"],
     hdrs = ["single_machine_factory_options.h"],
     tags = ["local"],
@@ -89,7 +97,7 @@ cc_library(
 )
 
 cc_library(
-    name = "single_machine_base",
+    name = "single_machine_base", copts = ["-flto"], linkopts = ["-flto"],
     srcs = [
         "single_machine_base.cc",
     ],
@@ -114,6 +122,7 @@ cc_library(
         "//scann/utils:types",
         "//scann/utils:util_functions",
         "//scann/utils:zip_sort",
+        "//scann/hw_alg:hw_alg",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/status",

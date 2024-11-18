@@ -15,13 +15,12 @@
 #ifndef SCANN_UTILS_INTRINSICS_ATTRIBUTES_H_
 #define SCANN_UTILS_INTRINSICS_ATTRIBUTES_H_
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #define SCANN_SSE4
-#define SCANN_AVX1 __attribute((target("avx")))
-#define SCANN_AVX2 __attribute((target("avx,avx2,fma")))
-#define SCANN_AVX512 \
-  __attribute((target("avx,avx2,fma,avx512f,avx512dq,avx512bw")))
+#define SCANN_AVX1
+#define SCANN_AVX2
+#define SCANN_AVX512
 
 #else
 

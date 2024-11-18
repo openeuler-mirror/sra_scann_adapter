@@ -20,7 +20,7 @@
 
 namespace research_scann {
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 namespace avx512 {
 #define SCANN_SIMD_ATTRIBUTE SCANN_AVX512

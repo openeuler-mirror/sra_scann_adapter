@@ -24,10 +24,10 @@
 #include "scann/utils/intrinsics/flags.h"
 #include "scann/utils/types.h"
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
-#include <emmintrin.h>
-#include <x86intrin.h>
+#include "avx2ki.h"
+#include "scann/hw_alg/include/arm_adp.h"
 
 namespace research_scann {
 namespace sse4 {
@@ -715,7 +715,7 @@ class Sse4<T, kNumRegistersInferred> {
     const auto& me = *this;
 
     if constexpr (IsSameAny<T, float, double>()) {
-      return (*me[0])[0];
+      return *(T *)&me;
     }
 
     if constexpr (IsSameAny<T, int8_t, uint8_t>()) {
@@ -728,7 +728,7 @@ class Sse4<T, kNumRegistersInferred> {
       return _mm_cvtsi128_si32(*me[0]);
     }
     if constexpr (IsSameAny<T, int64_t, uint64_t>()) {
-      return (*me[0])[0];
+      return *(T *)&me;
     }
     LOG(FATAL) << "Undefined";
   }
@@ -802,8 +802,8 @@ class Sse4<T, kNumRegistersInferred> {
     static_assert(!IsSame<T, double>(), "Nothing to expand to");
 
     if constexpr (!IsSameAny<T, float, double>()) {
-      __m128 hi = _mm_srli_si128(x, 8);
-      __m128 lo = x;
+      __m128i hi = _mm_srli_si128(x, 8);
+      __m128i lo = x;
 
       if constexpr (IsSame<T, int8_t>()) {
         return std::make_pair(_mm_cvtepi8_epi16(lo), _mm_cvtepi8_epi16(hi));

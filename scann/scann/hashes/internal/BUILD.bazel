@@ -37,7 +37,7 @@ cc_library(
 )
 
 cc_library(
-    name = "asymmetric_hashing_impl",
+    name = "asymmetric_hashing_impl",copts = ["-flto"], linkopts = ["-flto"],
     srcs = ["asymmetric_hashing_impl.cc"],
     hdrs = ["asymmetric_hashing_impl.h"],
     tags = ["local"],
@@ -62,6 +62,7 @@ cc_library(
         "@com_google_absl//absl/random",
         "@com_google_absl//absl/random:distributions",
         "@com_google_absl//absl/status",
+        "//scann/hw_alg:kscann_header_only",
     ],
     # The linker gets confused by explicitly instantiated templates  This
     # probably shouldn't be needed but is empirically necessary to get
@@ -77,7 +78,7 @@ batch_size_sharder(
 )
 
 cc_library(
-    name = "lut16_sse4",
+    name = "lut16_sse4", linkopts = ["-flto"],
     srcs = [":lut16_sse4_batches"],
     hdrs = ["lut16_sse4.h"],
     # We build this library at -O3 even for fastbuild and dbg
@@ -85,7 +86,7 @@ cc_library(
     # enormous stack frames in debug mode, causing stack overflows
     # in unit tests.  Forcing -O3 forces stack slot recycling.
     copts = [
-        "-O3",
+        "-O3", "-flto",
     ],
     tags = ["local"],
     textual_hdrs = ["lut16_sse4.inc"],
@@ -98,6 +99,8 @@ cc_library(
         "//scann/utils:types",
         "//scann/utils/intrinsics:attributes",
         "//scann/utils/intrinsics:sse4",
+        "//scann/hw_alg:arm_opt",
+        #"//scann/hw_alg:hw_alg"
     ],
 )
 
@@ -192,7 +195,7 @@ cc_library(
 )
 
 cc_library(
-    name = "write_distances_to_topn",
+    name = "write_distances_to_topn", copts = ["-flto"], linkopts = ["-flto"],
     srcs = ["write_distances_to_topn.cc"],
     hdrs = ["write_distances_to_topn.h"],
     tags = ["local"],
@@ -264,7 +267,7 @@ cc_library(
 )
 
 cc_library(
-    name = "stacked_quantizers",
+    name = "stacked_quantizers", copts = ["-flto"], linkopts = ["-flto"],
     srcs = ["stacked_quantizers.cc"],
     hdrs = ["stacked_quantizers.h"],
     tags = ["local"],

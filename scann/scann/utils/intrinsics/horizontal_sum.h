@@ -43,16 +43,12 @@ SCANN_INLINE void HorizontalSum4X(Simd<FloatT> a, Simd<FloatT> b,
 
 }  // namespace fallback
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 namespace sse4 {
 
 SCANN_INLINE float HorizontalSum(Sse4<float> x) {
-  x += Sse4<float>(_mm_shuffle_ps(*x, *x, 0b11'10'11'10));
-
-  x += Sse4<float>(_mm_shuffle_ps(*x, *x, 0b11'10'01'01));
-
-  return x.GetLowElement();
+  return _mm_vector_add_ps(*x);
 }
 
 SCANN_INLINE double HorizontalSum(Sse4<double> x) {
@@ -135,8 +131,8 @@ SCANN_AVX1_INLINE void HorizontalSum2X(Avx1<float> a, Avx1<float> b,
 
   sum += _mm256_shuffle_ps(sum, sum, 0b11'10'01'01);
 
-  *resulta = sum[0];
-  *resultb = sum[4];
+  *resulta = sum.vect_f32[0][0];
+  *resultb = sum.vect_f32[1][0];
 }
 
 SCANN_AVX1_INLINE void HorizontalSum3X(Avx1<float> a, Avx1<float> b,
@@ -148,9 +144,9 @@ SCANN_AVX1_INLINE void HorizontalSum3X(Avx1<float> a, Avx1<float> b,
 
   abcg += _mm256_shuffle_ps(abcg, abcg, 0b11'11'01'01);
 
-  *resulta = abcg[0];
-  *resultb = abcg[2];
-  *resultc = abcg[4];
+  *resulta = abcg.vect_f32[0][0];
+  *resultb = abcg.vect_f32[0][2];
+  *resultc = abcg.vect_f32[1][0];
 }
 
 SCANN_AVX1_INLINE void HorizontalSum4X(Avx1<float> a, Avx1<float> b,
@@ -163,10 +159,10 @@ SCANN_AVX1_INLINE void HorizontalSum4X(Avx1<float> a, Avx1<float> b,
 
   abcd += _mm256_shuffle_ps(abcd, abcd, 0b11'11'01'01);
 
-  *resulta = abcd[0];
-  *resultb = abcd[2];
-  *resultc = abcd[4];
-  *resultd = abcd[6];
+  *resulta = abcd.vect_f32[0][0];
+  *resultb = abcd.vect_f32[0][2];
+  *resultc = abcd.vect_f32[1][0];
+  *resultd = abcd.vect_f32[1][2];
 }
 
 SCANN_AVX1_INLINE void HorizontalSum2X(Avx1<double> a, Avx1<double> b,
@@ -175,8 +171,8 @@ SCANN_AVX1_INLINE void HorizontalSum2X(Avx1<double> a, Avx1<double> b,
 
   sum += _mm256_shuffle_pd(sum, sum, 0b11'11);
 
-  *resulta = sum[0];
-  *resultb = sum[2];
+  *resulta = sum.vect_f64[0][0];
+  *resultb = sum.vect_f64[0][2];
 }
 
 SCANN_AVX1_INLINE void HorizontalSum4X(Avx1<double> a, Avx1<double> b,

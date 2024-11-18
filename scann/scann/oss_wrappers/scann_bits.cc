@@ -19,25 +19,6 @@
 namespace research_scann {
 namespace bits {
 
-#if (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
-
-#else
-
-int FindLSBSetNonZero(uint32_t n) {
-  int rc = 31;
-  for (int i = 4, shift = 1 << 4; i >= 0; --i) {
-    const uint32_t x = n << shift;
-    if (x != 0) {
-      n = x;
-      rc -= shift;
-    }
-    shift >>= 1;
-  }
-  return rc;
-}
-
-#endif
-
 const char num_bits[] = {
     0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3, 3, 4,
     2, 3, 3, 4, 3, 4, 4, 5, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4, 3, 4, 4, 5,

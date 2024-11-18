@@ -1,0 +1,36 @@
+package(
+    default_visibility = ["//visibility:public"],
+    licenses = ["notice"],
+)
+
+cc_import(
+    name = "hw_alg",
+    hdrs = [
+            "include/kscann.h",
+            "include/IadpModel.h",
+            "include/lut16dep.h",
+            "include/k_reorder_helper_class.h"
+        ],
+    shared_library = "lib/libkscann.so",
+)
+
+cc_import(
+    name = "arm_opt",
+    hdrs = [
+        "include/lut16_sse4.h",
+    ],
+    static_library = "lib/liblut16_sse4.a"
+)
+
+exports_files(["lib/libsubavx2ki.a"])
+
+cc_library(
+    name = "kscann_header_only",
+    hdrs = [
+            "include/arm_opt.inc",
+            "include/lut16dep_helper.h",
+            "include/arm_adp.h",
+            "include/ftn_impl_helper_avx2.h",
+            "include/ftn_impl_helper_sse4.h",
+    ]
+)

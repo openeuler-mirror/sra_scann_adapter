@@ -44,7 +44,7 @@ class EpsilonFilteringCallback {
                            ManyToManyResultsCallback<FloatT> slow_path_fn)
       : epsilons_(epsilons), slow_path_fn_(std::move(slow_path_fn)) {}
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
   SCANN_AVX512_INLINE void InvokeOptimized(Avx512<float, 2> simd_dists,
                                            size_t first_dp_idx,
@@ -223,7 +223,7 @@ class EpsilonFilteringOffsetWrapper {
         dp_idx_offset_(dp_idx_offset),
         query_idx_table_(query_idx_table) {}
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
   SCANN_AVX512_INLINE void InvokeOptimized(Avx512<float, 2> simd_dists,
                                            size_t first_dp_idx,

@@ -53,6 +53,10 @@ ScannNumpy::ScannNumpy(const np_row_major_arr<float>& np_dataset,
                                         training_threads));
 }
 
+void ScannNumpy::SetNumThreads(int num_threads) {
+  scann_.SetNumThreads(num_threads);
+}
+
 std::pair<pybind11::array_t<DatapointIndex>, pybind11::array_t<float>>
 ScannNumpy::Search(const np_row_major_arr<float>& query, int final_nn,
                    int pre_reorder_nn, int leaves) {
@@ -74,7 +78,7 @@ ScannNumpy::Search(const np_row_major_arr<float>& query, int final_nn,
 
 std::pair<pybind11::array_t<DatapointIndex>, pybind11::array_t<float>>
 ScannNumpy::SearchBatched(const np_row_major_arr<float>& queries, int final_nn,
-                          int pre_reorder_nn, int leaves, bool parallel) {
+                          int pre_reorder_nn, int leaves, bool parallel, int batch_size) {
   if (queries.ndim() != 2)
     throw std::invalid_argument("Queries must be in two-dimensional array");
 
@@ -85,7 +89,7 @@ ScannNumpy::SearchBatched(const np_row_major_arr<float>& queries, int final_nn,
   Status status;
   if (parallel)
     status = scann_.SearchBatchedParallel(query_dataset, MakeMutableSpan(res),
-                                          final_nn, pre_reorder_nn, leaves);
+                                          final_nn, pre_reorder_nn, leaves, batch_size);
   else
     status = scann_.SearchBatched(query_dataset, MakeMutableSpan(res), final_nn,
                                   pre_reorder_nn, leaves);
@@ -101,6 +105,10 @@ ScannNumpy::SearchBatched(const np_row_major_arr<float>& queries, int final_nn,
   auto dis_ptr = reinterpret_cast<float*>(distances.request().ptr);
   scann_.ReshapeBatchedNNResult(MakeConstSpan(res), idx_ptr, dis_ptr, final_nn);
   return {indices, distances};
+}
+
+void ScannNumpy::SearchAdditionalParams(float adp_threshold, int adp_refined, int leaves_to_search) {
+  scann_.SearchAdditionalParams(adp_threshold, adp_refined, leaves_to_search);
 }
 
 void ScannNumpy::Serialize(std::string path) {

@@ -67,6 +67,7 @@ cc_library(
         "@com_google_absl//absl/numeric:bits",
         "@com_google_absl//absl/numeric:int128",
         "@com_google_absl//absl/strings",
+        "//scann/hw_alg:kscann_header_only",
     ],
 )
 

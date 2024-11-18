@@ -1724,7 +1724,7 @@ void DenseDistanceOneToMany(const DistanceMeasure& dist,
       dist, query, database, result, &set_distance_functor, pool);
 }
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 namespace sse4 {
 #define SCANN_SIMD_ATTRIBUTE SCANN_SSE4
@@ -1798,7 +1798,7 @@ SCANN_INLINE void OneToManyInt8FloatDispatch(
     const float* __restrict__ inv_multipliers_for_squared_l2,
     const IndexT* indices, MutableSpan<ResultElemT> result,
     CallbackT callback) {
-#ifdef __x86_64__
+#ifdef __aarch64__
 
   if constexpr (false && RuntimeSupportsAvx512()) {
     LOG(FATAL) << "We aren't compiling Avx-512 support yet.";

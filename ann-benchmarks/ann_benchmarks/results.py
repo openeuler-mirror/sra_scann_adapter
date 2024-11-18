@@ -4,6 +4,7 @@ import re
 import traceback
 from typing import Any, Optional, Set, Tuple, Iterator
 import h5py
+import psutil
 
 from ann_benchmarks.definitions import Definition
 
@@ -33,7 +34,8 @@ def build_result_filepath(dataset_name: Optional[str] = None,
         d.append(str(count))
     if definition:
         d.append(definition.algorithm + ("-batch" if batch_mode else ""))
-        data = definition.arguments + query_arguments
+        pid = [psutil.Process(os.getpid()).pid]
+        data = pid + definition.arguments + query_arguments
         d.append(re.sub(r"\W+", "_", json.dumps(data, sort_keys=True)).strip("_") + ".hdf5")
     return os.path.join(*d)
 

@@ -18,6 +18,8 @@
 #include <cstdint>
 #include <string>
 
+#include <arm_neon.h>
+
 #include "absl/strings/str_cat.h"
 #include "scann/utils/bits.h"
 #include "scann/utils/intrinsics/avx2.h"
@@ -120,17 +122,23 @@ SCANN_INLINE DistT FastMedianOf3(DistT v0, DistT v1, DistT v2) {
 
 }  // namespace
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 namespace avx2 {
 #define SCANN_SIMD_ATTRIBUTE SCANN_AVX2
+
+#include "scann/hw_alg/include/ftn_impl_helper_avx2.h"
 #include "scann/utils/fast_top_neighbors_impl.inc"
+
 #undef SCANN_SIMD_ATTRIBUTE
 }  // namespace avx2
 
 namespace sse4 {
 #define SCANN_SIMD_ATTRIBUTE SCANN_SSE4
+
+#include "scann/hw_alg/include/ftn_impl_helper_sse4.h"
 #include "scann/utils/fast_top_neighbors_impl.inc"
+
 #undef SCANN_SIMD_ATTRIBUTE
 }  // namespace sse4
 
@@ -141,7 +149,7 @@ size_t FastTopNeighbors<DistT, DatapointIndexT>::ApproxNthElement(
     size_t keep_min, size_t keep_max, size_t sz, DatapointIndexT* ii, DistT* dd,
     uint32_t* mm) {
   DCHECK_GT(keep_min, 0);
-#ifdef __x86_64__
+#ifdef __aarch64__
   if (RuntimeSupportsAvx2()) {
     return avx2::ApproxNthElementImpl(keep_min, keep_max, sz, ii, dd, mm);
   } else if (RuntimeSupportsSse4()) {

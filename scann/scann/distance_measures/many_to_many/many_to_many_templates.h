@@ -95,7 +95,7 @@
 
 namespace research_scann {
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 namespace sse4 {
 #define SCANN_SIMD_ATTRIBUTE SCANN_SSE4
@@ -170,7 +170,7 @@ SCANN_INLINE void DenseDistanceManyToManyImpl2(
   DCHECK(IsSupportedDistanceMeasure(dist));
   DCHECK_NE(dist.specially_optimized_distance_tag(), DistanceMeasure::COSINE);
 
-#ifdef __x86_64__
+#ifdef __aarch64__
   if (RuntimeSupportsAvx512()) {
     return avx512::DenseDistanceManyToManyImpl(dist, queries, database, pool,
                                                callback);
@@ -202,7 +202,7 @@ SCANN_INLINE void DenseDistanceManyToManyFP8PretransposedImpl2(
   DCHECK(IsSupportedDistanceMeasure(dist));
   DCHECK_NE(dist.specially_optimized_distance_tag(), DistanceMeasure::COSINE);
 
-#ifdef __x86_64__
+#ifdef __aarch64__
   if (RuntimeSupportsAvx512()) {
     return avx512::DenseManyToManyFP8PretransposedImpl(dist, queries, database,
                                                        pool, callback);

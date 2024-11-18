@@ -23,26 +23,9 @@
 namespace research_scann {
 namespace bits {
 
-#if (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
-
 inline int FindLSBSetNonZero(uint32_t n) { return __builtin_ctz(n); }
 
 inline int FindLSBSetNonZero64(uint64_t n) { return __builtin_ctzll(n); }
-
-#else
-
-int FindLSBSetNonZero(uint32_t n);
-
-inline int FindLSBSetNonZero64(uint64_t n) {
-  const uint32_t bottombits = static_cast<uint32_t>(n);
-  if (bottombits == 0) {
-    return 32 + FindLSBSetNonZero(static_cast<uint32_t>(n >> 32));
-  } else {
-    return FindLSBSetNonZero(bottombits);
-  }
-}
-
-#endif
 
 extern const char num_bits[];
 

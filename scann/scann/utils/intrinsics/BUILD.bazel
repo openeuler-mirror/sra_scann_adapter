@@ -3,6 +3,18 @@ package(
     licenses = ["notice"],
 )
 
+cc_import(
+    name = "avx2ki",
+    static_library = "//scann/hw_alg:lib/libsubavx2ki.a",  # Path to your static library
+    hdrs = ["ksl/include/avx2ki.h"],
+)
+
+cc_import(
+    name = "avx2neo",
+    hdrs = ["ksl/include/avx2ki.h"],
+    shared_library = "ksl/lib/libavx2ki.so",
+)
+
 ################################################################################
 #  PUBLIC HEADER
 ################################################################################
@@ -103,7 +115,11 @@ cc_library(
         ":flags",
         "//scann/utils:index_sequence",
         "//scann/utils:types",
+        ":avx2ki",
+        ":avx2neo",
+        "//scann/hw_alg:kscann_header_only"
     ],
+    includes = ["ksl/include"]
 )
 
 ################################################################################
@@ -121,6 +137,7 @@ cc_library(
         "//scann/utils:index_sequence",
         "//scann/utils:types",
     ],
+    includes = ["ksl/include"]
 )
 
 ################################################################################
@@ -137,7 +154,10 @@ cc_library(
         ":flags",
         "//scann/utils:index_sequence",
         "//scann/utils:types",
+        ":avx2ki",
+        ":avx2neo",
     ],
+    includes = ["ksl/include"]
 )
 
 ################################################################################
@@ -154,5 +174,7 @@ cc_library(
         ":flags",
         "//scann/utils:index_sequence",
         "//scann/utils:types",
+        ":avx2ki",
+        ":avx2neo",
     ],
 )

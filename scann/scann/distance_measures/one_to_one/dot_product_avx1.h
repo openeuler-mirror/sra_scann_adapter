@@ -15,8 +15,8 @@
 #ifndef SCANN_DISTANCE_MEASURES_ONE_TO_ONE_DOT_PRODUCT_AVX1_H_
 #define SCANN_DISTANCE_MEASURES_ONE_TO_ONE_DOT_PRODUCT_AVX1_H_
 #include <cstdint>
-#ifdef __x86_64__
-
+#ifdef __aarch64__
+#include "avx2ki.h"
 #include "scann/data_format/datapoint.h"
 #include "scann/utils/intrinsics/attributes.h"
 

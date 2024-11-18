@@ -4,7 +4,7 @@
 #include "scann/oss_wrappers/scann_bits.h"
 #include "scann/utils/common.h"
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #include "scann/utils/bits.h"
 #include "scann/utils/intrinsics/avx2.h"

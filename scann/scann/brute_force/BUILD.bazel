@@ -7,7 +7,7 @@ package(
 )
 
 cc_library(
-    name = "brute_force",
+    name = "brute_force", copts = ["-flto"], linkopts = ["-flto"],
     srcs = [
         "brute_force.cc",
     ],
@@ -37,7 +37,7 @@ cc_library(
 )
 
 cc_library(
-    name = "scalar_quantized_brute_force",
+    name = "scalar_quantized_brute_force", copts = ["-flto"], linkopts = ["-flto"],
     srcs = [
         "scalar_quantized_brute_force.cc",
     ],

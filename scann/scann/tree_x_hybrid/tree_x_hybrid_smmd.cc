@@ -831,6 +831,15 @@ Status TreeXHybridSMMD<T>::PreprocessQueryIntoParamsUnlocked(
   return OkStatus();
 }
 
+template <typename T>
+bool TreeXHybridSMMD<T>::SearchCenters(const DatapointPtr<T>& query, 
+      const int num_centers, vector<KMeansTreeSearchResult> &centers_to_search) {
+    auto kmeans_partitioner =
+      dynamic_cast<const KMeansTreePartitioner<T>*>(query_tokenizer_.get());
+    kmeans_partitioner->TokensForDatapointWithSpilling(query, num_centers, &centers_to_search);
+    return true;
+}
+
 SCANN_INSTANTIATE_TREE_X_HYBRID_SMMD();
 
 }  // namespace research_scann

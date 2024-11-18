@@ -19,52 +19,34 @@
 
 #include "scann/utils/common.h"
 #include "scann/utils/intrinsics/flags.h"
+#include "scann/hw_alg/include/kscann.h"
+
 
 using std::shared_ptr;
 
 namespace research_scann {
 namespace asymmetric_hashing2 {
 
-PackedDataset CreatePackedDataset(
+PackedDataset _CreatePackedDataset(
     const DenseDataset<uint8_t>& hashed_database) {
   PackedDataset result;
   result.bit_packed_data =
       asymmetric_hashing_internal::CreatePackedDataset(hashed_database);
   result.num_datapoints = hashed_database.size();
+
+  // only works for even number of dimensions (num_blocks).
+  // For odd value of num_blocks, one should adjust packed dataset generation and Sse4LUT16BottomLoop
+  assert(hashed_database.empty() || hashed_database[0].nonzero_entries() % 2 == 0);
   result.num_blocks =
-      (!hashed_database.empty()) ? (hashed_database[0].nonzero_entries()) : 0;
+      (!hashed_database.empty()) ? ((hashed_database[0].nonzero_entries() + 1) & (~1)) : 0;
   return result;
 }
 
-DenseDataset<uint8_t> UnpackDataset(const PackedDataset& packed) {
-  const size_t num_dim = packed.num_blocks, num_dp = packed.num_datapoints;
-
-  vector<uint8_t> unpacked(num_dim * num_dp);
-
-  int idx = 0;
-  for (int dp_block = 0; dp_block < num_dp / 32; dp_block++) {
-    const int out_idx = 32 * dp_block;
-    for (int dim = 0; dim < num_dim; dim++) {
-      for (int offset = 0; offset < 16; offset++) {
-        uint8_t data = packed.bit_packed_data[idx++];
-        unpacked[(out_idx | offset) * num_dim + dim] = data & 15;
-        unpacked[(out_idx | 16 | offset) * num_dim + dim] = data >> 4;
-      }
-    }
-  }
-
-  if (num_dp % 32 != 0) {
-    const int out_idx = num_dp - (num_dp % 32);
-    for (int dim = 0; dim < num_dim; dim++) {
-      for (int offset = 0; offset < 16; offset++) {
-        uint8_t data = packed.bit_packed_data[idx++];
-        int idx1 = out_idx | offset, idx2 = out_idx | 16 | offset;
-        if (idx1 < num_dp) unpacked[idx1 * num_dim + dim] = data & 15;
-        if (idx2 < num_dp) unpacked[idx2 * num_dim + dim] = data >> 4;
-      }
-    }
-  }
-  return DenseDataset<uint8_t>(unpacked, packed.num_datapoints);
+DenseDataset<uint8_t> UnpackDataset(const PackedDataset &packed)
+{
+  return DenseDataset<uint8_t>(
+      hw_alg::UnpackDatasetImpl(packed.bit_packed_data, packed.num_blocks, packed.num_datapoints),
+      packed.num_datapoints);
 }
 
 template <typename T>

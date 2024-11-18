@@ -80,6 +80,7 @@ cc_library(
         "//scann/utils:io_oss_wrapper",
         "//scann/utils:scann_config_utils",
         "//scann/utils:threads",
+        "//scann/hw_alg:arm_opt",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/container:node_hash_set",

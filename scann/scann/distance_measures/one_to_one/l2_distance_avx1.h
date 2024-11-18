@@ -14,7 +14,7 @@
 
 #ifndef SCANN_DISTANCE_MEASURES_ONE_TO_ONE_L2_DISTANCE_AVX1_H_
 #define SCANN_DISTANCE_MEASURES_ONE_TO_ONE_L2_DISTANCE_AVX1_H_
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #include "scann/data_format/datapoint.h"
 #include "scann/utils/intrinsics/attributes.h"

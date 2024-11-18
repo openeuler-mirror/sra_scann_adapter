@@ -4,7 +4,7 @@ package(
 )
 
 cc_library(
-    name = "one_to_many",
+    name = "one_to_many", copts = ["-flto"], linkopts = ["-flto"],
     srcs = ["one_to_many.cc"],
     hdrs = ["one_to_many.h"],
     tags = ["local"],

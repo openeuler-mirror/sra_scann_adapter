@@ -142,7 +142,7 @@ class Simd<T, kNumElementsArg> {
     }
   }
 
-  static SCANN_INLINE Simd Zeros() {
+  static SCANN_INLINE Simd Zeros_s() {
     Simd<T, kNumElements> ret;
     for (size_t j : Seq(kNumElements)) {
       ret[j] = IntelType(0);

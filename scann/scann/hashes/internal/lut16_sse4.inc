@@ -4,11 +4,13 @@
 #include "scann/oss_wrappers/scann_bits.h"
 #include "scann/utils/common.h"
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #include "scann/utils/bits.h"
 #include "scann/utils/intrinsics/sse4.h"
-#include "tensorflow/core/platform/prefetch.h"
+
+#include "scann/hw_alg/include/lut16_sse4.h" 
+
 
 namespace research_scann {
 namespace asymmetric_hashing_internal {
@@ -26,42 +28,17 @@ template <size_t kNumQueries, PrefetchStrategy kPrefetch>
 SCANN_SSE4_INLINE Sse4<int16_t, kNumQueries, 4> Sse4LUT16BottomLoop(
     const uint8_t* data_start, array<const uint8_t*, kNumQueries> lookup_starts,
     DimensionIndex num_blocks) {
-  static_assert(kNumQueries <= 3,
-                "Register spilling happens when kNumQueries > 3");
+  uint16x8x4_t acc[kNumQueries];
+  int16x8_t total_bias = vdupq_n_s16(num_blocks * 128);
+  
+  hw_alg::Sse4LUT16BottomLoopExtract<kNumQueries>(acc,data_start,lookup_starts,num_blocks);
+  
   Sse4<int16_t, kNumQueries, 4> int16_accums = sse4::Zeros();
-  const Sse4<uint8_t> sign7 = 0x0F;
-  const Sse4<int16_t> total_bias = num_blocks * 128;
-  for (; num_blocks != 0; --num_blocks, data_start += 16) {
-    if (kPrefetch != PrefetchStrategy::kOff) {
-      ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_NTA>(
-          data_start + kPrefetchBytesAhead);
-    }
-
-    auto mask = Sse4<uint8_t>::Load(data_start);
-    Sse4<uint8_t> mask0 = mask & sign7;
-    Sse4<uint8_t> mask1 = Sse4<uint8_t>((Sse4<uint16_t>(mask) >> 4)) & sign7;
-    for (size_t j : Seq(kNumQueries)) {
-      const Sse4<uint8_t> dict = Sse4<uint8_t>::Load(lookup_starts[j]);
-      lookup_starts[j] += 16;
-      const Sse4<uint8_t> res0 = _mm_shuffle_epi8(*dict, *mask0);
-      const Sse4<uint8_t> res1 = _mm_shuffle_epi8(*dict, *mask1);
-
-      int16_accums[j][0] += Sse4<int16_t>(Sse4<uint16_t>(res0));
-      int16_accums[j][1] += Sse4<int16_t>(Sse4<uint16_t>(res0) >> 8);
-      int16_accums[j][2] += Sse4<int16_t>(Sse4<uint16_t>(res1));
-      int16_accums[j][3] += Sse4<int16_t>(Sse4<uint16_t>(res1) >> 8);
-    }
-  }
-
   for (size_t j : Seq(kNumQueries)) {
-    Sse4<int16_t, 4> copy = int16_accums[j];
-    copy[0] -= (copy[1] << 8);
-    copy[2] -= (copy[3] << 8);
-    int16_accums[j][0] = _mm_unpacklo_epi16(*copy[0], *copy[1]);
-    int16_accums[j][1] = _mm_unpackhi_epi16(*copy[0], *copy[1]);
-    int16_accums[j][2] = _mm_unpacklo_epi16(*copy[2], *copy[3]);
-    int16_accums[j][3] = _mm_unpackhi_epi16(*copy[2], *copy[3]);
-    int16_accums[j] -= total_bias;
+    int16_accums[j][0] = {.vect_s16 = vsubq_s16(vreinterpretq_s16_u16(acc[j].val[0]), total_bias)};
+    int16_accums[j][1] = {.vect_s16 = vsubq_s16(vreinterpretq_s16_u16(acc[j].val[1]), total_bias)};
+    int16_accums[j][2] = {.vect_s16 = vsubq_s16(vreinterpretq_s16_u16(acc[j].val[2]), total_bias)};
+    int16_accums[j][3] = {.vect_s16 = vsubq_s16(vreinterpretq_s16_u16(acc[j].val[3]), total_bias)};
   }
 
   return int16_accums;
@@ -83,15 +60,11 @@ template <size_t kNumQueries, PrefetchStrategy kPrefetch>
 SCANN_SSE4_INLINE Sse4<int16_t, kNumQueries, 4> Sse4LUT16MiddleLoop(
     const uint8_t* data_start, array<const uint8_t*, kNumQueries> lookup_starts,
     const DimensionIndex num_blocks) {
-  constexpr size_t kSizeB = (kNumQueries == 1) ? 1 : 2;
-  constexpr size_t kNumBCases[] = {0, 2, 1};
-  constexpr size_t kNumB = (kNumQueries == 1) ? 1 : kNumBCases[kNumQueries % 3];
-
-  constexpr size_t kRemaining = kNumQueries - kNumB * kSizeB;
-  static_assert(kRemaining % 3 == 0, "");
-
-  constexpr size_t kSizeA = 3;
-  constexpr size_t kNumA = kRemaining / 3;
+  constexpr size_t kNumACases[] = {0, 1, 2, 3, 4, 5, 6, 4, 4, 6};
+  constexpr size_t kSizeA = kNumACases[kNumQueries];
+  constexpr size_t kNumB = kNumQueries % kSizeA;
+  constexpr size_t kSizeB = (kNumB > 0) ? 1 : 0;
+  constexpr size_t kNumA = (kNumQueries - kSizeB) / kSizeA;
 
   Sse4<int16_t, kNumQueries, 4> result;
   for (size_t j : Seq(kNumA)) {
@@ -154,7 +127,12 @@ SCANN_SSE4_OUTLINE void LUT16Sse4<kNumQueries, kPrefetch>::GetInt16Distances(
     auto int16_accums = Sse4LUT16MiddleLoop<kNumQueries, kPrefetch>(
         data_start, lookups, num_blocks);
     for (size_t j : Seq(kNumQueries)) {
-      int16_accums[j].Store(distances[j] + dp_idx);
+      int16x8x4_t dists;
+      dists.val[0] = (*int16_accums[j][0]).vect_s16;
+      dists.val[1] = (*int16_accums[j][1]).vect_s16;
+      dists.val[2] = (*int16_accums[j][2]).vect_s16;
+      dists.val[3] = (*int16_accums[j][3]).vect_s16;
+      vst4q_s16(distances[j] + dp_idx, dists);
     }
   }
 }
@@ -173,7 +151,17 @@ SCANN_SSE4_OUTLINE void LUT16Sse4<kNumQueries, kPrefetch>::GetInt32Distances(
         Sse4LUT16BottomLoopInt32<kNumQueries, kPrefetch>(data_start, lookups,
                                                          num_blocks);
     for (size_t j : Seq(kNumQueries)) {
-      int32_accums[j].Store(distances[j] + 32 * k);
+      int32x4x4_t dists1, dists2;
+      dists1.val[0] = (*int32_accums[j][0]).vect_s32;
+      dists1.val[1] = (*int32_accums[j][2]).vect_s32;
+      dists1.val[2] = (*int32_accums[j][4]).vect_s32;
+      dists1.val[3] = (*int32_accums[j][6]).vect_s32;
+      dists2.val[0] = (*int32_accums[j][1]).vect_s32;
+      dists2.val[1] = (*int32_accums[j][3]).vect_s32;
+      dists2.val[2] = (*int32_accums[j][5]).vect_s32;
+      dists2.val[3] = (*int32_accums[j][7]).vect_s32;
+      vst4q_s32(distances[j] + 32 * k, dists1);
+      vst4q_s32(distances[j] + 32 * k + 16, dists2);
     }
   }
 }
@@ -193,8 +181,18 @@ SCANN_SSE4_OUTLINE void LUT16Sse4<kNumQueries, kPrefetch>::GetFloatDistances(
     auto int32_accums = Sse4LUT16BottomLoopInt32<kNumQueries, kPrefetch>(
         data_start, lookups, num_blocks);
     for (size_t j : Seq(kNumQueries)) {
-      (int32_accums[j].template ConvertTo<float>() * Sse4<float>(mults[j]))
-          .Store(distances[j] + 32 * k);
+      auto float_accums = (int32_accums[j].template ConvertTo<float>() * Sse4<float>(mults[j]));
+      float32x4x4_t dists1, dists2;
+      dists1.val[0] = (*float_accums[0]).vect_f32;
+      dists1.val[1] = (*float_accums[2]).vect_f32;
+      dists1.val[2] = (*float_accums[4]).vect_f32;
+      dists1.val[3] = (*float_accums[6]).vect_f32;
+      dists2.val[0] = (*float_accums[1]).vect_f32;
+      dists2.val[1] = (*float_accums[3]).vect_f32;
+      dists2.val[2] = (*float_accums[5]).vect_f32;
+      dists2.val[3] = (*float_accums[7]).vect_f32;
+      vst4q_f32(distances[j] + 32 * k, dists1);
+      vst4q_f32(distances[j] + 32 * k + 16, dists2);
     }
   }
 }
@@ -231,13 +229,19 @@ SCANN_SSE4_INLINE void GetTopInt16DistancesImpl(
         data_start, lookups, num_blocks);
     for (size_t j : Seq(kNumQueries)) {
       auto compute_push_mask = [&]() SCANN_INLINE_LAMBDA {
-        return GetComparisonMask(int16_accums[j] < simd_thresholds[j]);
+        return hw_alg::GetComparisonMask((*int16_accums[j][0]).vect_s16,(*int16_accums[j][1]).vect_s16,
+            (*int16_accums[j][2]).vect_s16,(*int16_accums[j][3]).vect_s16,(*simd_thresholds[j]).vect_s16);
       };
       uint32_t push_mask = compute_push_mask();
 
       if (!push_mask) continue;
 
-      int16_accums[j].Store(distances_buffer);
+      int16x8x4_t dists;
+      dists.val[0] = (*int16_accums[j][0]).vect_s16;
+      dists.val[1] = (*int16_accums[j][1]).vect_s16;
+      dists.val[2] = (*int16_accums[j][2]).vect_s16;
+      dists.val[3] = (*int16_accums[j][3]).vect_s16;
+      vst4q_s16(distances_buffer, dists);
 
       if (k == num_32dp_simd_iters - 1) {
         push_mask &= final_mask;
@@ -258,7 +262,6 @@ SCANN_SSE4_INLINE void GetTopInt16DistancesImpl(
         const bool needs_collection = topn_mutators[j].Push(dp_idx, distance);
         if (ABSL_PREDICT_FALSE(needs_collection)) {
           topn_mutators[j].GarbageCollect();
-
           simd_thresholds[j] = topn_mutators[j].epsilon();
 
           push_mask &= compute_push_mask();
@@ -334,7 +337,8 @@ SCANN_SSE4_INLINE void GetTopFloatDistancesImpl(
         data_start, lookups, num_blocks);
     for (size_t j : Seq(kNumQueries)) {
       auto compute_push_mask = [&]() SCANN_INLINE_LAMBDA {
-        return GetComparisonMask(int16_accums[j] < simd_thresholds[j]);
+        return hw_alg::GetComparisonMask((*int16_accums[j][0]).vect_s16,(*int16_accums[j][1]).vect_s16,
+            (*int16_accums[j][2]).vect_s16,(*int16_accums[j][3]).vect_s16,(*simd_thresholds[j]).vect_s16);
       };
       uint32_t push_mask = compute_push_mask();
 
@@ -343,7 +347,19 @@ SCANN_SSE4_INLINE void GetTopFloatDistancesImpl(
       auto fvals = int16_accums[j]
                        .template ExpandTo<int32_t>()
                        .template ConvertTo<float>();
-      (fvals * inv_mults[j] + simd_biases[j]).Store(distances_buffer);
+
+      fvals = (fvals * inv_mults[j] + simd_biases[j]);
+      float32x4x4_t dists1, dists2;
+      dists1.val[0] = (*fvals[0]).vect_f32;
+      dists1.val[1] = (*fvals[2]).vect_f32;
+      dists1.val[2] = (*fvals[4]).vect_f32;
+      dists1.val[3] = (*fvals[6]).vect_f32;
+      dists2.val[0] = (*fvals[1]).vect_f32;
+      dists2.val[1] = (*fvals[3]).vect_f32;
+      dists2.val[2] = (*fvals[5]).vect_f32;
+      dists2.val[3] = (*fvals[7]).vect_f32;
+      vst4q_f32(distances_buffer, dists1);
+      vst4q_f32(distances_buffer + 16, dists2);
 
       if (k == num_32dp_simd_iters - 1) {
         push_mask &= final_mask;

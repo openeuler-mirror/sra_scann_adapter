@@ -15,7 +15,7 @@
 #include "scann/distance_measures/one_to_one/dot_product_sse4.h"
 
 #include <cstdint>
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #include "scann/utils/intrinsics/sse4.h"
 
@@ -224,7 +224,7 @@ SCANN_SSE4_OUTLINE double DenseDotProductSse4(const DatapointPtr<int8_t>& a,
     __m128 accumulator = _mm_add_ps(accumulator0, accumulator1);
     accumulator = _mm_hadd_ps(accumulator, accumulator);
     accumulator = _mm_hadd_ps(accumulator, accumulator);
-    scalar_accumulator = accumulator[0];
+    scalar_accumulator = accumulator.vect_f32[0];
   }
 
   DCHECK_LT(aend - aptr, 4);
@@ -283,12 +283,12 @@ SCANN_SSE4_OUTLINE double DenseDotProductSse4(const DatapointPtr<float>& a,
   }
 
   if (aptr < aend) {
-    accumulator[0] += aptr[0] * bptr[0];
+    accumulator.vect_f32[0] += aptr[0] * bptr[0];
   }
 
   accumulator = _mm_hadd_ps(accumulator, accumulator);
   accumulator = _mm_hadd_ps(accumulator, accumulator);
-  return accumulator[0];
+  return accumulator.vect_f32[0];
 }
 
 SCANN_SSE4_OUTLINE double DenseDotProductSse4(const DatapointPtr<double>& a,
@@ -328,7 +328,7 @@ SCANN_SSE4_OUTLINE double DenseDotProductSse4(const DatapointPtr<double>& a,
   }
 
   accumulator = _mm_hadd_pd(accumulator, accumulator);
-  double result = accumulator[0];
+  double result = accumulator.vect_f64[0];
 
   if (aptr < aend) {
     result += *aptr * *bptr;
@@ -423,7 +423,7 @@ SCANN_SSE4_OUTLINE double DenseDotProductSse4(const DatapointPtr<int8_t>& a,
     __m128 accumulator = _mm_add_ps(accumulator0, accumulator1);
     accumulator = _mm_hadd_ps(accumulator, accumulator);
     accumulator = _mm_hadd_ps(accumulator, accumulator);
-    scalar_accumulator = accumulator[0];
+    scalar_accumulator = accumulator.vect_f32[0];
   }
 
   DCHECK_LT(aend - aptr, 4);
@@ -528,7 +528,7 @@ SCANN_SSE4_OUTLINE double DenseDotProductSse4(const DatapointPtr<int8_t>& a,
     __m128 accumulator = _mm_add_ps(accumulator0, accumulator1);
     accumulator = _mm_hadd_ps(accumulator, accumulator);
     accumulator = _mm_hadd_ps(accumulator, accumulator);
-    scalar_accumulator = accumulator[0];
+    scalar_accumulator = accumulator.vect_f32[0];
   }
 
   DCHECK_LT(aend - aptr, 4);

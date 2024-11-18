@@ -17,7 +17,7 @@
 
 #include <cstdint>
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
 #include "scann/hashes/internal/lut16_args.h"
 #include "scann/utils/intrinsics/attributes.h"

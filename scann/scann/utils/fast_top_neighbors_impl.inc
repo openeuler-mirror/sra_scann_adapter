@@ -1,30 +1,6 @@
 
 
 #include <cstdint>
-template <bool kIsEquality, typename DistT>
-SCANN_SIMD_INLINE size_t CalculateSwapMasks(const DistT* values,
-                                            uint32_t* masks, size_t n_masks,
-                                            uint32_t final_mask,
-                                            DistT threshold) {
-  const auto simd_threshold = Simd<DistT>::Broadcast(threshold);
-
-  size_t n_kept = 0;
-  for (size_t j : Seq(n_masks)) {
-    auto vals = SimdFor<DistT, 32>::Load(values + 32 * j);
-    const uint32_t mask = kIsEquality
-                              ? GetComparisonMask(vals == simd_threshold)
-                              : GetComparisonMask(vals < simd_threshold);
-    n_kept += absl::popcount(mask);
-    masks[j] = mask;
-  }
-
-  uint32_t& last_mask = masks[n_masks - 1];
-  n_kept -= absl::popcount(last_mask);
-  last_mask &= final_mask;
-  n_kept += absl::popcount(last_mask);
-
-  return n_kept;
-}
 
 template <typename DistT>
 SCANN_SIMD_INLINE size_t CalculateLtSwapMasks(const DistT* values,

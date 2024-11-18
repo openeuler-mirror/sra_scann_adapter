@@ -1,4 +1,6 @@
 
+#include "scann/hw_alg/include/arm_opt.inc"
+
 
 template <int kRegisterIdx, typename T = Simd<float>>
 SCANN_SIMD_INLINE auto Int8ToFloat(Sse4<int8_t> int8_vals) {
@@ -61,11 +63,18 @@ SCANN_SIMD_INLINE SimdT FusedMultiplyOp(SimdT a, SimdT b, SimdT mult,
   }
 }
 
+
+
+
 template <size_t kNumDims, bool kIsSquaredL2, size_t kUnrollBy>
-SCANN_SIMD_INLINE Simd<float, kUnrollBy> HandleXDims(
+SCANN_SIMD_INLINE enable_if_t<!std::is_same<Simd<float>, Sse4<float>>::value, Simd<float, kUnrollBy>>
+// SCANN_SIMD_INLINE Simd<float, kUnrollBy>
+HandleXDims(
     const float* query, array<const int8_t*, kUnrollBy> ptrs,
     const float* inv_multipliers_for_squared_l2, size_t dim,
     Simd<float, kUnrollBy> accums) {
+  static_assert(kNumDims == 4 || kNumDims == 8 || kNumDims == 16);
+
   auto qq_vals = LoadXFloats<kNumDims>(query + dim);
 
   Sse4<int8_t, kUnrollBy> db_vals_int8;
@@ -217,8 +226,8 @@ SCANN_SIMD_INLINE void OneToManyInt8FloatTemplate(
          j++) {
       const int8_t* prefetch_ptr = get_db_ptr(j);
       for (size_t n : Seq(cache_lines_per_datapoint)) {
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_NTA>(
-            prefetch_ptr + n * kCacheLine);
+        /*::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_NTA>(
+            prefetch_ptr + n * kCacheLine);*/ __builtin_prefetch(prefetch_ptr + n * kCacheLine, 0, 0);
       }
     }
 
@@ -230,8 +239,8 @@ SCANN_SIMD_INLINE void OneToManyInt8FloatTemplate(
 
       for (size_t n : Seq(cache_lines_per_datapoint)) {
         for (size_t jj : Seq(kUnrollBy)) {
-          ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_NTA>(
-              prefetch_ptrs[jj] + n * kCacheLine);
+          /*::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_NTA>(
+              prefetch_ptrs[jj] + n * kCacheLine);*/ __builtin_prefetch(prefetch_ptrs[jj] + n * kCacheLine, 0, 0);
         }
       }
     }
@@ -265,8 +274,8 @@ SCANN_SIMD_INLINE void OneToManyInt8FloatTemplate(
 
         for (size_t n : Seq(cache_lines_per_datapoint)) {
           for (size_t jj : Seq(kUnrollBy)) {
-            ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_NTA>(
-                prefetch_ptrs[jj] + n * kCacheLine);
+            /*::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_NTA>(
+                prefetch_ptrs[jj] + n * kCacheLine);*/ __builtin_prefetch(prefetch_ptrs[jj] + n * kCacheLine, 0, 0);
           }
         }
       }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 #include "scann/hashes/internal/lut16_avx512.inc"
 
 namespace research_scann {

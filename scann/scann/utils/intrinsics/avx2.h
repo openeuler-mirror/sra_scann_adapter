@@ -25,9 +25,9 @@
 #include "scann/utils/intrinsics/flags.h"
 #include "scann/utils/types.h"
 
-#ifdef __x86_64__
+#ifdef __aarch64__
 
-#include <x86intrin.h>
+#include "avx2ki.h"
 
 namespace research_scann {
 namespace avx2 {
@@ -166,7 +166,7 @@ class Avx2<T, kNumRegistersInferred> {
     if constexpr (IsSameAny<T, float>()) {
       return _mm256_setzero_ps();
     } else if constexpr (IsSameAny<T, double>()) {
-      return _mm256_setzero_ps();
+      return _mm256_setzero_pd();
     } else {
       return _mm256_setzero_si256();
     }
