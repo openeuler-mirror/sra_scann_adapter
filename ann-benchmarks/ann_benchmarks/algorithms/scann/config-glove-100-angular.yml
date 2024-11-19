@@ -1,0 +1,15 @@
+float:
+  angular:
+  - base_args: {}
+    constructor: Scann
+    disabled: false
+    docker_tag: ann-benchmarks-scann
+    module: ann_benchmarks.algorithms.scann
+    name: scann
+    run_groups:
+      scann1:
+        args: [[2000], [0.2], [2], [dot_product]]
+        query_args: [[ #[55, 95, 0, 0], 
+                       #[130, 150, 0, 0],
+                       #[400, 300, 0, 0], 
+                      [410, 250, 0.24, 0, 150]]]
