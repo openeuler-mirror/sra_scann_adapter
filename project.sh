@@ -24,7 +24,7 @@ prepare(){
 build_py(){
     cd $workdir/scann
     #902B(SVE)
-    CC=gcc bazel build -c opt --cxxopt="-std=c++17" --copt=-fsized-deallocation --copt=-w --copt=-g --cxxopt=-g --copt=-O3 --cxxopt=-O3 --copt=-fprefetch-loop-arrays --cxxopt=-fprefetch-loop-arrays --copt=-march=armv8.2-a+lse+sve --cxxopt=-march=armv8.2-a+lse+sve --copt=-mtune=tsv110 --cxxopt=-mtune=tsv110 :build_pip_pkg
+    CC=gcc bazel build -c opt --cxxopt="-std=c++17" --copt=-fsized-deallocation --copt=-w --copt=-fstack-protector-strong --copt=-g --cxxopt=-g --copt=-O3 --cxxopt=-O3 --copt=-fprefetch-loop-arrays --cxxopt=-fprefetch-loop-arrays --copt=-march=armv8.2-a+lse+sve --cxxopt=-march=armv8.2-a+lse+sve --copt=-mtune=tsv110 --cxxopt=-mtune=tsv110 :build_pip_pkg
     #CC=gcc bazel build -c opt --cxxopt="-std=c++17" --copt=-fsized-deallocation --copt=-w --copt=-g --cxxopt=-g --copt=-O3 --cxxopt=-O3 --copt=-Om --cxxopt=-Om :build_pip_pkg
     #920()
     #CC=gcc bazel build -c opt --cxxopt="-std=c++17" --copt=-fsized-deallocation --copt=-w --copt=-g --cxxopt=-g --copt=-O3 --cxxopt=-O3 --copt=-fprefetch-loop-arrays --copt=-march=armv8.2-a+lse --cxxopt=-march=armv8.2-a+lse --copt=-mtune=tsv110 --cxxopt=-mtune=tsv110 :build_pip_pkg
