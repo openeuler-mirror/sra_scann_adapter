@@ -93,4 +93,20 @@ void FP8SimdBlockTransposedDatabase::TransposeOneBlock(const int8_t* src,
   }
 }
 
+Datapoint<int8_t> FP8SimdBlockTransposedDatabase::ReconstructDatapoint(
+    DatapointIndex idx) const {
+  CHECK(idx < size_);
+  const DatapointIndex local_idx = idx % simd_block_size_;
+  const DatapointIndex block_start = idx - local_idx;
+  const DatapointIndex block_size =
+      std::min<DatapointIndex>(simd_block_size_, size_ - block_start);
+
+  std::vector<int8_t> data(dimensionality_);
+  for (DimensionIndex dim_idx : Seq(dimensionality_)) {
+    data[dim_idx] = payload_[block_start * dimensionality_ +
+                             dim_idx * block_size + local_idx];
+  }
+  return Datapoint<int8_t>({}, std::move(data), dimensionality_);
+}
+
 }  // namespace research_scann

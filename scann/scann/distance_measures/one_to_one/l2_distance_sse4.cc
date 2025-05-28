@@ -16,10 +16,14 @@
 
 #include <cstdint>
 #include <utility>
+
+#include "scann/data_format/datapoint.h"
+#include "scann/utils/intrinsics/attributes.h"
 #ifdef __aarch64__
 
 #include "scann/utils/intrinsics/sse4.h"
 #include "scann/hw_alg/include/lut16_sse4.h"
+#include "scann/utils/common.h"
 
 namespace research_scann {
 namespace l2_internal {
@@ -78,8 +82,8 @@ SCANN_SSE4_INLINE double DenseSquaredL2DistanceByteImpl(const Byte* aptr,
     }
 
     if (aptr + 4 <= aend) {
-      __m128i avals = _mm_cvtsi32_si128(*reinterpret_cast<const int*>(aptr));
-      __m128i bvals = _mm_cvtsi32_si128(*reinterpret_cast<const int*>(bptr));
+      __m128i avals = _mm_cvtsi32_si128(UnalignedLoad<int>(aptr));
+      __m128i bvals = _mm_cvtsi32_si128(UnalignedLoad<int>(bptr));
       __m128i diff = SseFuncs::AbsDiff(avals, bvals);
       __m128i lower = _mm_unpacklo_epi8(diff, _mm_setzero_si128());
       lower = _mm_mullo_epi16(lower, lower);
@@ -171,14 +175,14 @@ SCANN_SSE4_OUTLINE double DenseSquaredL2DistanceSse4(
   const float* bptr = b.values();
   if (num_nonzero <= 64) {
     auto get_terms = [](const float* aptr, const float* bptr)
-                      SCANN_SSE4_INLINE_LAMBDA {
-                        __m128 avals = _mm_loadu_ps(aptr);
-                        __m128 bvals = _mm_loadu_ps(bptr);
-                        __m128 diff = _mm_sub_ps(avals, bvals);
-                        return _mm_mul_ps(diff, diff);
-                      };
+                        SCANN_SSE4_INLINE_LAMBDA {
+                          __m128 avals = _mm_loadu_ps(aptr);
+                          __m128 bvals = _mm_loadu_ps(bptr);
+                          __m128 diff = _mm_sub_ps(avals, bvals);
+                          return _mm_mul_ps(diff, diff);
+                        };
 
-    const float* aend = aptr + num_nonzero;
+    const float* aend = aptr + a.nonzero_entries();
     __m128 accumulator = _mm_setzero_ps();
     if (aptr + 8 <= aend) {
       __m128 accumulator0 = get_terms(aptr, bptr);
@@ -212,6 +216,7 @@ SCANN_SSE4_OUTLINE double DenseSquaredL2DistanceSse4(
     }
 
     if (aptr < aend) {
+      // accumulator[0] += (aptr[0] - bptr[0]) * (aptr[0] - bptr[0]);
       accumulator.vect_f32[0] += (aptr[0] - bptr[0]) * (aptr[0] - bptr[0]);
     }
 
@@ -222,7 +227,6 @@ SCANN_SSE4_OUTLINE double DenseSquaredL2DistanceSse4(
     return hw_alg::DenseSquaredL2DistanceBatched<float>(aptr,bptr,num_nonzero);
   }
 }
-
 
 SCANN_SSE4_OUTLINE double DenseSquaredL2DistanceSse4(
     const DatapointPtr<double>& a, const DatapointPtr<double>& b) {

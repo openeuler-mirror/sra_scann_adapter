@@ -19,16 +19,25 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <utility>
+#include <vector>
 
-#include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
 #include "gtest/gtest_prod.h"
 #include "scann/base/search_parameters.h"
 #include "scann/base/single_machine_base.h"
+#include "scann/base/single_machine_factory_options.h"
 #include "scann/data_format/datapoint.h"
 #include "scann/data_format/dataset.h"
+#include "scann/distance_measures/distance_measure_base.h"
+#include "scann/oss_wrappers/scann_threadpool.h"
 #include "scann/partitioning/partitioner_base.h"
+#include "scann/tree_x_hybrid/internal/utils.h"
 #include "scann/tree_x_hybrid/leaf_searcher_optional_parameter_creator.h"
+#include "scann/utils/common.h"
+#include "scann/utils/hash_leaf_helpers.h"
+#include "scann/utils/top_n_amortized_constant.h"
 #include "scann/utils/types.h"
 
 namespace research_scann {
@@ -39,9 +48,13 @@ class DisjointRestrictTokenSearcher;
 template <typename T>
 class TreeXHybridSMMD : public SingleMachineSearcherBase<T> {
  public:
+
   TreeXHybridSMMD(shared_ptr<const TypedDataset<T>> dataset,
                   shared_ptr<const DenseDataset<uint8_t>> hashed_dataset,
                   int32_t default_pre_reordering_num_neighbors,
+                  float default_pre_reordering_epsilon);
+
+  TreeXHybridSMMD(int32_t default_pre_reordering_num_neighbors,
                   float default_pre_reordering_epsilon);
 
   using StatusOrSearcher = StatusOr<unique_ptr<SingleMachineSearcherBase<T>>>;
@@ -76,6 +89,17 @@ class TreeXHybridSMMD : public SingleMachineSearcherBase<T> {
           int32_t token)>
           leaf_searcher_builder);
 
+  Status AddLeafSearcher();
+
+  Status BuildStreamingAsymmetricHashingLeafSearchers(
+      size_t n_tokens, ConstSpan<int32_t> query_tokens,
+      const internal::TrainedAsymmetricHashingResults<T>& training_results,
+      bool streaming_result,
+      std::function<StatusOrSearcher(
+          int32_t token,
+          const internal::TrainedAsymmetricHashingResults<T>& training_results)>
+          leaf_searcher_builder);
+
   Status BuildPretrainedScalarQuantizationLeafSearchers(
       vector<std::vector<DatapointIndex>> datapoints_by_token,
       vector<DenseDataset<int8_t>> partitioned_datasets,
@@ -85,11 +109,27 @@ class TreeXHybridSMMD : public SingleMachineSearcherBase<T> {
                            vector<float> squared_l2_norms)>
           leaf_searcher_builder);
 
+  Status BuildStreamingScalarQuantizationLeafSearchers(
+      size_t n_tokens, absl::Span<const int32_t> query_tokens,
+      std::shared_ptr<const DistanceMeasure> distance,
+      ConstSpan<float> inverse_multiplier_by_dimension, bool streaming_result,
+      std::function<StatusOrSearcher(
+          int token, std::shared_ptr<const DistanceMeasure> distance,
+          ConstSpan<float> inverse_multiplier_by_dimension)>
+          leaf_searcher_builder);
+
+  Status BuildStreamingLeafSearchers(
+      size_t n_tokens, absl::Span<const int32_t> query_tokens,
+      std::shared_ptr<const DistanceMeasure> distance, bool streaming_result,
+      std::function<StatusOrSearcher(
+          int token, std::shared_ptr<const DistanceMeasure> distance)>
+          leaf_searcher_builder);
+
   void set_query_tokenizer(shared_ptr<const Partitioner<T>> query_tokenizer) {
     query_tokenizer_ = query_tokenizer;
   }
 
-  shared_ptr<const Partitioner<T>> query_tokenizer() {
+  shared_ptr<const Partitioner<T>> query_tokenizer() const {
     return query_tokenizer_;
   }
 
@@ -98,7 +138,7 @@ class TreeXHybridSMMD : public SingleMachineSearcherBase<T> {
     database_tokenizer_ = database_tokenizer;
   }
 
-  shared_ptr<const Partitioner<T>> database_tokenizer() {
+  shared_ptr<const Partitioner<T>> database_tokenizer() const {
     return database_tokenizer_;
   }
 
@@ -126,6 +166,17 @@ class TreeXHybridSMMD : public SingleMachineSearcherBase<T> {
   StatusOr<shared_ptr<const DenseDataset<float>>> SharedFloatDatasetIfNeeded()
       override;
 
+  vector<uint32_t> SizeByPartition() const final;
+
+  float spilling_overretrieve_factor() const {
+    return spilling_overretrieve_factor_;
+  }
+  void set_spilling_overretrieve_factor(float factor) {
+    DCHECK_GE(factor, 1.0);
+    DCHECK_LE(factor, 2.0);
+    spilling_overretrieve_factor_ = factor;
+  }
+
  protected:
   bool impl_needs_dataset() const final { return leaf_searchers_.empty(); }
 
@@ -144,8 +195,10 @@ class TreeXHybridSMMD : public SingleMachineSearcherBase<T> {
   Status FindNeighborsBatchedImpl(
       const TypedDataset<T>& queries, ConstSpan<SearchParameters> params,
       MutableSpan<NNResultsVector> results) const final;
+
   bool SearchCenters(const DatapointPtr<T>& query, 
-        const int num_centers, vector<KMeansTreeSearchResult> &centers_to_search);
+      const int num_centers, vector<pair<DatapointIndex, float>>  &centers_to_search);
+
  private:
   class CentersToSearch
       : public SearchParameters::UnlockedQueryPreprocessingResults {
@@ -184,8 +237,10 @@ class TreeXHybridSMMD : public SingleMachineSearcherBase<T> {
   CreateLeafOptionalParameters(const DatapointPtr<T>& query,
                                const SearchParameters& top_level_params) const;
 
-  int spilling_multiplier() const {
-    return datapoints_by_token_disjoint_ ? 1 : 2;
+  int32_t NumNeighborsWithSpillingMultiplier(int32_t num_neighbors) const {
+    return datapoints_by_token_disjoint_
+               ? num_neighbors
+               : SafeIntFloatMul(num_neighbors, spilling_overretrieve_factor_);
   }
 
   vector<unique_ptr<SingleMachineSearcherBase<T>>> leaf_searchers_;
@@ -195,15 +250,35 @@ class TreeXHybridSMMD : public SingleMachineSearcherBase<T> {
 
   vector<std::vector<DatapointIndex>> datapoints_by_token_;
 
-  bool datapoints_by_token_disjoint_ = true;
-
   shared_ptr<const LeafSearcherOptionalParameterCreator<T>>
       leaf_searcher_optional_parameter_creator_ = nullptr;
 
   DatapointIndex num_datapoints_ = 0;
 
+  uint32_t leaf_size_upper_bound_ = 0;
+
+  bool datapoints_by_token_disjoint_ = true;
+
+  bool is_streaming_input_data_ = false;
+
+  bool is_streaming_result_ = false;
+
+  std::function<StatusOrSearcher(
+      shared_ptr<TypedDataset<T>> dataset_partition,
+      shared_ptr<DenseDataset<uint8_t>> hashed_dataset_partition,
+      int32_t token)>
+      leaf_searcher_builder_;
+
+  std::function<StatusOrSearcher(
+      DenseDataset<int8_t> scalar_quantized_partition,
+      vector<float> squared_l2_norms)>
+      sq_leaf_searcher_builder_;
+
+  float spilling_overretrieve_factor_ = 2.0f;
+
   template <typename U>
   friend class DisjointRestrictTokenSearcher;
+
 };
 
 #define SCANN_INSTANTIATE_TREE_X_HYBRID_SMMD_CROWDING(extern_keyword, data_type)

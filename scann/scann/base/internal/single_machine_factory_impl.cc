@@ -12,19 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "scann/base/internal/single_machine_factory_impl.h"
 
+#include <cstddef>
+#include <vector>
 
-#include "scann/distance_measures/many_to_many/many_to_many.h"
-#include "scann/distance_measures/many_to_many/many_to_many_common.h"
-#include "scann/distance_measures/many_to_many/many_to_many_templates.h"
+#include "scann/utils/common.h"
+#include "scann/utils/fixed_point/pre_quantized_fixed_point.h"
 
 namespace research_scann {
-namespace mm_internal {
+namespace internal {
 
-template void DenseDistanceManyToManyImpl(
-    const DistanceMeasure &dist, const DenseDataset<double> &queries,
-    const DenseDataset<double> &database, ThreadPool *pool,
-    EpsilonFilteringCallback<double> callback);
+std::vector<float> InverseMultiplier(PreQuantizedFixedPoint* fixed_point) {
+  std::vector<float> inverse_multipliers;
+  inverse_multipliers.resize(fixed_point->multiplier_by_dimension->size());
 
+  for (size_t i : Seq(inverse_multipliers.size())) {
+    inverse_multipliers[i] = 1.0f / fixed_point->multiplier_by_dimension->at(i);
+  }
+  return inverse_multipliers;
 }
+
+}  // namespace internal
 }  // namespace research_scann

@@ -28,7 +28,12 @@ PYBIND11_MODULE(scann_pybind, py_module) {
                           const std::string&, int>())
       .def("search", &research_scann::ScannNumpy::Search)
       .def("search_batched", &research_scann::ScannNumpy::SearchBatched)
-      .def("search_additional_params", &research_scann::ScannNumpy::SearchAdditionalParams)
+      .def("rebalance", &research_scann::ScannNumpy::Rebalance)
+      .def("size", &research_scann::ScannNumpy::Size)
       .def("set_num_threads", &research_scann::ScannNumpy::SetNumThreads)
-      .def("serialize", &research_scann::ScannNumpy::Serialize);
+      .def("serialize", &research_scann::ScannNumpy::Serialize)
+      .def("serialize_to_numpy", &research_scann::ScannNumpy::SerializeToNumpy)
+      .def("search_additional_params", &research_scann::ScannNumpy::SearchAdditionalParams)
+      .def("getnum", &research_scann::ScannNumpy::GetNum)
+      .def("getdim", &research_scann::ScannNumpy::GetDim);
 }

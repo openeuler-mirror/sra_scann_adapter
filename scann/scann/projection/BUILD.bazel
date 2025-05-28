@@ -17,13 +17,9 @@ cc_library(
     deps = [
         "//scann/data_format:datapoint",
         "//scann/data_format:dataset",
-        "//scann/oss_wrappers:scann_aligned_malloc",
-        "//scann/oss_wrappers:scann_down_cast",
-        "//scann/oss_wrappers:tf_dependency",
+        "//scann/proto:projection_cc_proto",
         "//scann/utils:types",
         "//scann/utils:util_functions",
-        "@com_google_absl//absl/base",
-        "@com_google_absl//absl/flags:flag",
     ],
 )
 
@@ -36,12 +32,17 @@ cc_library(
         ":identity_projection",
         ":projection_base",
         "//scann/data_format:datapoint",
+        "//scann/oss_wrappers:scann_status",
         "//scann/proto:projection_cc_proto",
+        "//scann/utils:common",
         "//scann/utils:datapoint_utils",
         "//scann/utils:types",
+        "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
     ],
 )
+
+
 
 cc_library(
     name = "identity_projection",
@@ -71,9 +72,11 @@ cc_library(
         ":projection_base",
         "//scann/data_format:dataset",
         "//scann/proto:projection_cc_proto",
+        "//scann/utils:common",
         "//scann/utils:types",
     ],
 )
+
 
 # Unit Tests
 # ========================================================================

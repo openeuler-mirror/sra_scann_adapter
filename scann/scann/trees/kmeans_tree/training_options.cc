@@ -16,7 +16,10 @@
 
 #include "scann/trees/kmeans_tree/training_options.h"
 
+#include "absl/log/log.h"
+#include "absl/time/time.h"
 #include "scann/proto/partitioning.pb.h"
+#include "scann/utils/common.h"
 #include "scann/utils/gmm_utils.h"
 
 namespace research_scann {
@@ -41,6 +44,9 @@ KMeansTreeTrainingOptions::KMeansTreeTrainingOptions(
       break;
     case PartitioningConfig::GREEDY_BALANCED:
       balancing_type = GmmUtils::Options::GREEDY_BALANCED;
+      break;
+    case PartitioningConfig::UNBALANCED_FLOAT32:
+      balancing_type = GmmUtils::Options::UNBALANCED_FLOAT32;
       break;
   }
   switch (config.trainer_type()) {

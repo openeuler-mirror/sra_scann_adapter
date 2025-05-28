@@ -27,18 +27,22 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
+#include "scann/data_format/datapoint.h"
 #include "scann/data_format/dataset.h"
 #include "scann/distance_measures/distance_measure_base.h"
 #include "scann/distance_measures/one_to_many/one_to_many.h"
+#include "scann/distance_measures/one_to_one/l2_distance.h"
 #include "scann/oss_wrappers/scann_castops.h"
+#include "scann/oss_wrappers/scann_threadpool.h"
 #include "scann/proto/partitioning.pb.h"
 #include "scann/trees/kmeans_tree/kmeans_tree.pb.h"
 #include "scann/trees/kmeans_tree/training_options.h"
+#include "scann/utils/common.h"
 #include "scann/utils/datapoint_utils.h"
 #include "scann/utils/fast_top_neighbors.h"
 #include "scann/utils/types.h"
 #include "scann/utils/zip_sort.h"
-#include "tensorflow/core/platform/macros.h"
+#include "scann/hw_alg/include/L2.h"
 
 namespace research_scann {
 
@@ -48,11 +52,18 @@ class KMeansTreeNode {
 
   explicit KMeansTreeNode(int32_t leaf_id) { leaf_id_ = leaf_id; }
 
+  static KMeansTreeNode CreateFlat(DenseDataset<float> centers);
+
   void Reset();
 
   bool IsLeaf() const { return children_.empty(); }
 
   int32_t LeafId() const { return leaf_id_; }
+
+  // template <typename T>
+  // Status ApplyAvq(const DenseDataset<T>& dataset,
+  //                 ConstSpan<std::vector<DatapointIndex>> datapoints_by_token,
+  //                 float avq_eta, ThreadPool* pool_or_null = nullptr);
 
   const DenseDataset<float>& Centers() const { return float_centers_; }
 
@@ -67,6 +78,9 @@ class KMeansTreeNode {
   }
 
   DatapointPtr<float> cur_node_center() const { return cur_node_center_; }
+
+  template <typename Real>
+  const DenseDataset<Real>& GetCentersByTemplateType() const;
 
  private:
   friend class KMeansTree;
@@ -104,14 +118,16 @@ class KMeansTreeNode {
 
   void PopulateCurNodeCenters();
 
-  template <typename Real>
-  const DenseDataset<Real>& GetCentersByTemplateType() const;
-
   void UnionIndicesImpl(absl::flat_hash_set<DatapointIndex>* union_hash) const;
 
   void MaybeInitializeThreadSharding();
 
   DenseDataset<float> float_centers_;
+
+  std::vector<uint8_t> l2_raw_point_centers_;
+ 
+  double scale_;
+  double bias_;
 
   DenseDataset<int8_t> fixed_point_centers_;
 
@@ -221,24 +237,39 @@ Status KMeansTreeNode::GetAllDistancesInt8(const DistanceMeasure& dist,
         "dot-product distance and squared L2 distance.");
   }
 
-  Datapoint<float> inv_adjusted;
-  CopyToDatapoint(query, &inv_adjusted);
-
-  if (is_sq_l2) {
-    for (const auto& [i, inv_mult] : Enumerate(inv_int8_multipliers_))
-      inv_adjusted.mutable_values_span()[i] *= inv_mult * 2;
+  if (is_sq_l2 && scale_ == 1.0 && bias_ == 0.0) {
+    int num_centers = centers.size();
+    int dims = centers.dimensionality();
+ 
+    uint8_t query_i8[dims];
+    for (int i = 0; i < dims; ++i) {
+      query_i8[i] = (uint8_t)(query.values()[i] * scale_ + bias_ + 0.5);
+    }
+    float tt_dis[num_centers];
+    hw_alg::L2sqr_batch4_u8InOne(query_i8, l2_raw_point_centers_.data(), num_centers, dims, tt_dis);
+    for(int i = 0; i < num_centers; ++i) {
+      distances->at(i) = tt_dis[i];
+    }
   } else {
-    for (const auto& [i, inv_mult] : Enumerate(inv_int8_multipliers_))
-      inv_adjusted.mutable_values_span()[i] *= inv_mult;
-  }
-
-  DenseDotProductDistanceOneToManyInt8Float(inv_adjusted.ToPtr(), centers,
-                                            MakeMutableSpan(*distances));
-  if (is_sq_l2) {
-    DCHECK_EQ(center_squared_l2_norms_.size(), distances->size());
-    float query_norm = SquaredL2Norm(query);
-    for (const auto [i, center_norm] : Enumerate(center_squared_l2_norms_))
-      distances->at(i) += query_norm + center_norm;
+    Datapoint<float> inv_adjusted;
+    CopyToDatapoint(query, &inv_adjusted);
+ 
+    if (is_sq_l2) {
+      for (const auto& [i, inv_mult] : Enumerate(inv_int8_multipliers_))
+        inv_adjusted.mutable_values_span()[i] *= inv_mult * 2;
+    } else {
+      for (const auto& [i, inv_mult] : Enumerate(inv_int8_multipliers_))
+        inv_adjusted.mutable_values_span()[i] *= inv_mult;
+    }
+ 
+    DenseDotProductDistanceOneToManyInt8Float(inv_adjusted.ToPtr(), centers,
+                                              MakeMutableSpan(*distances));
+    if (is_sq_l2) {
+      DCHECK_EQ(center_squared_l2_norms_.size(), distances->size());
+      float query_norm = SquaredL2Norm(query);
+      for (const auto [i, center_norm] : Enumerate(center_squared_l2_norms_))
+        distances->at(i) += query_norm + center_norm;
+    }
   }
   return OkStatus();
 }

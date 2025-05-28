@@ -18,7 +18,6 @@
 #ifdef __aarch64__
 
 #include "scann/utils/intrinsics/attributes.h"
-#include "tensorflow/core/platform/types.h"
 
 namespace research_scann {
 namespace asymmetric_hashing_internal {

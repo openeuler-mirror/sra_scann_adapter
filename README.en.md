@@ -1,36 +1,45 @@
 # sra_scann_adapter
 
-#### Description
-Adapter for Kunpeng ScaNN Library
+### 1 Introduction
 
-#### Software Architecture
-Software architecture description
+Adapter for Kunpeng ScaNN Library  
 
-#### Installation
+### 2 Usage Instructions
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+#### 2.1 Installing SRA_Recall
 
-#### Instructions
+Please follow the **[Kunpeng Recall Algorithm Library](https://www.hikunpeng.com/document/detail/en/SRA/accelFeatures/recall/kunpengsra_recall_16_0030.html) Developer Guide > Installing and Configuring the Environment > Using SRA_Recall > Installing SRA_Recall** section for installation.  
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+#### 2.2 Generating a Complete ScaNN Library
 
-#### Contribution
+KScaNN relies on the Kunpeng-optimized open-source ScaNN to provide full functionality. After installing SRA_Recall, you need to:  
 
-1.  Fork the repository
-2.  Create Feat_xxx branch
-3.  Commit your code
-4.  Create Pull Request
+1. Obtain the Kunpeng-optimized open-source ScaNN code  
 
+2. Compile the complete ScaNN Python package  
 
-#### Gitee Feature
+3. Generate dynamic library files  
 
-1.  You can use Readme\_XXX.md to support different languages, such as Readme\_en.md, Readme\_zh.md
-2.  Gitee blog [blog.gitee.com](https://blog.gitee.com)
-3.  Explore open source project [https://gitee.com/explore](https://gitee.com/explore)
-4.  The most valuable open source project [GVP](https://gitee.com/gvp)
-5.  The manual of Gitee [https://gitee.com/help](https://gitee.com/help)
-6.  The most popular members  [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+Refer to **[Kunpeng Recall Algorithm Library](https://www.hikunpeng.com/document/detail/en/SRA/accelFeatures/recall/kunpengsra_recall_16_0030.html) Developer Guide > Installing and Configuring the Environment > Using SRA_Recall > Generating a Complete ScaNN Library** for implementation.  
+
+### 3 Testing Guidelines
+
+#### 3.1 Basic Dataset Overview
+
+| Dataset       | Dimensions | Training Size | Test Size | Distance Metric | Description          |
+| ------------- | ---------- | ------------- | --------- | --------------- |:-------------------- |
+| GloVe         | 100        | 1183514       | 10000     | Angular         | English word vectors |
+| DEEP1B        | 96         | 9990000       | 10000     | Angular         | Image vectors        |
+| GIST          | 960        | 1000000       | 1000      | Euclidean       | Image GIST features  |
+| SIFT          | 128        | 1000000       | 10000     | Euclidean       | Image SIFT features  |
+| Fashion-MNIST | 784        | 60000         | 10000     | Euclidean       | Grayscale image data |
+
+#### 3.2 Operational Steps
+
+**Python API Testing:**  
+
+Follow **[Kunpeng Recall Algorithm Library](https://www.hikunpeng.com/document/detail/en/SRA/accelFeatures/recall/kunpengsra_recall_16_0030.html) Developer Guide > KScaNN APIs > Python > Examples**  
+
+**C++ API Testing:**  
+
+Follow **[Kunpeng Recall Algorithm Library](https://www.hikunpeng.com/document/detail/en/SRA/accelFeatures/recall/kunpengsra_recall_16_0030.html) Developer Guide > KScaNN APIs > C++ > Examples**

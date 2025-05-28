@@ -37,6 +37,16 @@ cc_library(
 )
 
 cc_library(
+    name = "scann_cpu_info",
+    srcs = ["scann_cpu_info.cc"],
+    hdrs = ["scann_cpu_info.h"],
+    tags = ["local"],
+    deps = [
+        "@com_google_absl//absl/base",
+    ],
+)
+
+cc_library(
     name = "scann_bits",
     srcs = ["scann_bits.cc"],
     hdrs = ["scann_bits.h"],
@@ -70,7 +80,8 @@ cc_library(
     tags = ["local"],
     deps = [
         ":scann_status_builder",
-        "//scann/oss_wrappers:tf_dependency",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -81,9 +92,10 @@ cc_library(
     hdrs = ["scann_status_builder.h"],
     tags = ["local"],
     deps = [
-        "//scann/oss_wrappers:tf_dependency",
+        "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:cord",
     ],
@@ -103,9 +115,12 @@ cc_library(
 
 cc_library(
     name = "scann_threadpool",
+    srcs = ["scann_threadpool.cc"],
     hdrs = ["scann_threadpool.h"],
     tags = ["local"],
     deps = [
-        "//scann/oss_wrappers:tf_dependency",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@eigen",
     ],
 )

@@ -53,7 +53,7 @@ message FixedPoint {
 
   optional int32 num_machines = 4;
 }
-
+ 
 message NeighborSelectionOverrideHeuristics {
   optional float approx_num_neighbors_multiplier = 1 [default = 2.0];
 

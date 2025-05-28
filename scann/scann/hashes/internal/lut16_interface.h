@@ -19,15 +19,16 @@
 #include <utility>
 
 #include "scann/hashes/internal/lut16_args.h"
-#include "scann/hashes/internal/lut16_avx2.h"
-#include "scann/hashes/internal/lut16_avx512.h"
-#include "scann/hashes/internal/lut16_sse4.h"
 #include "scann/oss_wrappers/scann_threadpool.h"
 #include "scann/utils/alignment.h"
 #include "scann/utils/common.h"
 #include "scann/utils/fast_top_neighbors.h"
 #include "scann/utils/intrinsics/flags.h"
 #include "scann/utils/types.h"
+
+#include "scann/hashes/internal/lut16_avx2.h"
+#include "scann/hashes/internal/lut16_avx512.h"
+#include "scann/hashes/internal/lut16_sse4.h"
 
 namespace research_scann {
 namespace asymmetric_hashing_internal {
@@ -151,7 +152,7 @@ class LUT16Interface {
     case 9:                                                           \
       return ClassName<9, kPrefetch>::Function(__VA_ARGS__);          \
     default:                                                          \
-      LOG(FATAL) << "Invalid Batch Size";                             \
+      DLOG(FATAL) << "Invalid Batch Size";                            \
   }
 
 #ifdef __aarch64__
@@ -252,7 +253,6 @@ void LUT16Interface::GetTopFloatDistances(LUT16ArgsTopN<float, TopN> args) {
 }
 
 #else
-
 void LUT16Interface::GetDistances(LUT16Args<int16_t> args) {
   LOG(FATAL) << "LUT16 is only supported on x86!";
 }

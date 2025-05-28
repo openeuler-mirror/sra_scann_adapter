@@ -19,6 +19,7 @@
 #include <string>
 #include <utility>
 
+#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 
 namespace research_scann {
@@ -29,10 +30,7 @@ unique_ptr<ThreadPool> StartThreadPool(const std::string& pool_name,
     return nullptr;
   }
 
-  tensorflow::ThreadOptions options;
-  options.stack_size = 1048576;
-  auto pool = make_unique<ThreadPool>(tensorflow::Env::Default(), options,
-                                      pool_name, num_threads);
+  auto pool = make_unique<ThreadPool>(pool_name, num_threads);
   return pool;
 }
 

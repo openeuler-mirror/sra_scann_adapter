@@ -11,15 +11,13 @@ SCANN_SIMD_INLINE T FusedMultiplyAdd(T a, T b, T acc) {
   if constexpr (IsSame<T, Avx512<float>>()) {
     return _mm512_fmadd_ps(*a, *b, *acc);
   }
-  if constexpr (IsSame<T, Avx512<double>>()) {
-    return _mm512_fmadd_pd(*a, *b, *acc);
-  }
   if constexpr (IsSame<T, Sse4<float>>()) {
     return _mm_fmadd_ps_mine(*a, *b, *acc);
   }
   if constexpr (IsSame<T, Sse4<double>>()) {
     return _mm_fmadd_pd_mine(*a, *b, *acc);
   }
+
   return acc + (a * b);
 }
 
@@ -48,6 +46,7 @@ SCANN_SIMD_INLINE T FusedMultiplySubtract(T a, T b, T acc) {
   if constexpr (IsSame<T, Sse4<double>>()) {
     return _mm_fnmadd_pd_mine(*a, *b, *acc);
   }
+
   return acc - (a * b);
 }
 

@@ -6,11 +6,10 @@
 
 #ifdef __aarch64__
 
+#include "absl/base/prefetch.h"
 #include "scann/utils/bits.h"
 #include "scann/utils/intrinsics/sse4.h"
-
 #include "scann/hw_alg/include/lut16_sse4.h" 
-
 
 namespace research_scann {
 namespace asymmetric_hashing_internal {
@@ -30,7 +29,7 @@ SCANN_SSE4_INLINE Sse4<int16_t, kNumQueries, 4> Sse4LUT16BottomLoop(
     DimensionIndex num_blocks) {
   uint16x8x4_t acc[kNumQueries];
   int16x8_t total_bias = vdupq_n_s16(num_blocks * 128);
-  
+  // std::cout << "start Sse4LUT16BottomLoopExtractNew" << std::endl;
   hw_alg::Sse4LUT16BottomLoopExtractNew<kNumQueries>(acc,data_start,lookup_starts,num_blocks);
   
   Sse4<int16_t, kNumQueries, 4> int16_accums = sse4::Zeros();
@@ -60,11 +59,15 @@ template <size_t kNumQueries, PrefetchStrategy kPrefetch>
 SCANN_SSE4_INLINE Sse4<int16_t, kNumQueries, 4> Sse4LUT16MiddleLoop(
     const uint8_t* data_start, array<const uint8_t*, kNumQueries> lookup_starts,
     const DimensionIndex num_blocks) {
-  constexpr size_t kNumACases[] = {0, 1, 2, 3, 4, 5, 6, 4, 4, 6};
-  constexpr size_t kSizeA = kNumACases[kNumQueries];
-  constexpr size_t kNumB = kNumQueries % kSizeA;
-  constexpr size_t kSizeB = (kNumB > 0) ? 1 : 0;
-  constexpr size_t kNumA = (kNumQueries - kSizeB) / kSizeA;
+  constexpr size_t kSizeB = (kNumQueries == 1) ? 1 : 2;
+  constexpr size_t kNumBCases[] = {0, 2, 1};
+  constexpr size_t kNumB = (kNumQueries == 1) ? 1 : kNumBCases[kNumQueries % 3];
+
+  constexpr size_t kRemaining = kNumQueries - kNumB * kSizeB;
+  static_assert(kRemaining % 3 == 0, "");
+
+  constexpr size_t kSizeA = 3;
+  constexpr size_t kNumA = kRemaining / 3;
 
   Sse4<int16_t, kNumQueries, 4> result;
   for (size_t j : Seq(kNumA)) {
@@ -127,12 +130,7 @@ SCANN_SSE4_OUTLINE void LUT16Sse4<kNumQueries, kPrefetch>::GetInt16Distances(
     auto int16_accums = Sse4LUT16MiddleLoop<kNumQueries, kPrefetch>(
         data_start, lookups, num_blocks);
     for (size_t j : Seq(kNumQueries)) {
-      int16x8x4_t dists;
-      dists.val[0] = (*int16_accums[j][0]).vect_s16;
-      dists.val[1] = (*int16_accums[j][1]).vect_s16;
-      dists.val[2] = (*int16_accums[j][2]).vect_s16;
-      dists.val[3] = (*int16_accums[j][3]).vect_s16;
-      vst4q_s16(distances[j] + dp_idx, dists);
+      int16_accums[j].Store(distances[j] + dp_idx);
     }
   }
 }
@@ -151,17 +149,7 @@ SCANN_SSE4_OUTLINE void LUT16Sse4<kNumQueries, kPrefetch>::GetInt32Distances(
         Sse4LUT16BottomLoopInt32<kNumQueries, kPrefetch>(data_start, lookups,
                                                          num_blocks);
     for (size_t j : Seq(kNumQueries)) {
-      int32x4x4_t dists1, dists2;
-      dists1.val[0] = (*int32_accums[j][0]).vect_s32;
-      dists1.val[1] = (*int32_accums[j][2]).vect_s32;
-      dists1.val[2] = (*int32_accums[j][4]).vect_s32;
-      dists1.val[3] = (*int32_accums[j][6]).vect_s32;
-      dists2.val[0] = (*int32_accums[j][1]).vect_s32;
-      dists2.val[1] = (*int32_accums[j][3]).vect_s32;
-      dists2.val[2] = (*int32_accums[j][5]).vect_s32;
-      dists2.val[3] = (*int32_accums[j][7]).vect_s32;
-      vst4q_s32(distances[j] + 32 * k, dists1);
-      vst4q_s32(distances[j] + 32 * k + 16, dists2);
+      int32_accums[j].Store(distances[j] + 32 * k);
     }
   }
 }
@@ -181,18 +169,8 @@ SCANN_SSE4_OUTLINE void LUT16Sse4<kNumQueries, kPrefetch>::GetFloatDistances(
     auto int32_accums = Sse4LUT16BottomLoopInt32<kNumQueries, kPrefetch>(
         data_start, lookups, num_blocks);
     for (size_t j : Seq(kNumQueries)) {
-      auto float_accums = (int32_accums[j].template ConvertTo<float>() * Sse4<float>(mults[j]));
-      float32x4x4_t dists1, dists2;
-      dists1.val[0] = (*float_accums[0]).vect_f32;
-      dists1.val[1] = (*float_accums[2]).vect_f32;
-      dists1.val[2] = (*float_accums[4]).vect_f32;
-      dists1.val[3] = (*float_accums[6]).vect_f32;
-      dists2.val[0] = (*float_accums[1]).vect_f32;
-      dists2.val[1] = (*float_accums[3]).vect_f32;
-      dists2.val[2] = (*float_accums[5]).vect_f32;
-      dists2.val[3] = (*float_accums[7]).vect_f32;
-      vst4q_f32(distances[j] + 32 * k, dists1);
-      vst4q_f32(distances[j] + 32 * k + 16, dists2);
+      (int32_accums[j].template ConvertTo<float>() * Sse4<float>(mults[j]))
+          .Store(distances[j] + 32 * k);
     }
   }
 }
@@ -224,6 +202,16 @@ SCANN_SSE4_INLINE void GetTopInt16DistancesImpl(
   auto restrict_whitelist_ptrs =
       args.template GetRestrictWhitelistPtrs<kNumQueries>();
   for (DatapointIndex k : Seq(num_32dp_simd_iters)) {
+    bool can_skip_batch = true;
+    for (size_t j : Seq(kNumQueries)) {
+      if (restrict_whitelist_ptrs[j] == nullptr ||
+          restrict_whitelist_ptrs[j][k] != 0) {
+        can_skip_batch = false;
+        break;
+      }
+    }
+    if (can_skip_batch) continue;
+
     const uint8_t* data_start = packed_dataset + k * 16 * num_blocks;
     auto int16_accums = Sse4LUT16MiddleLoop<kNumQueries, kPrefetch>(
         data_start, lookups, num_blocks);
@@ -262,6 +250,7 @@ SCANN_SSE4_INLINE void GetTopInt16DistancesImpl(
         const bool needs_collection = topn_mutators[j].Push(dp_idx, distance);
         if (ABSL_PREDICT_FALSE(needs_collection)) {
           topn_mutators[j].GarbageCollect();
+
           simd_thresholds[j] = topn_mutators[j].epsilon();
 
           push_mask &= compute_push_mask();
@@ -332,6 +321,16 @@ SCANN_SSE4_INLINE void GetTopFloatDistancesImpl(
   auto restrict_whitelist_ptrs =
       args.template GetRestrictWhitelistPtrs<kNumQueries>();
   for (DatapointIndex k : Seq(num_32dp_simd_iters)) {
+    bool can_skip_batch = true;
+    for (size_t j : Seq(kNumQueries)) {
+      if (restrict_whitelist_ptrs[j] == nullptr ||
+          restrict_whitelist_ptrs[j][k] != 0) {
+        can_skip_batch = false;
+        break;
+      }
+    }
+    if (can_skip_batch) continue;
+
     const uint8_t* data_start = packed_dataset + k * 16 * num_blocks;
     auto int16_accums = Sse4LUT16MiddleLoop<kNumQueries, kPrefetch>(
         data_start, lookups, num_blocks);
@@ -347,7 +346,6 @@ SCANN_SSE4_INLINE void GetTopFloatDistancesImpl(
       auto fvals = int16_accums[j]
                        .template ExpandTo<int32_t>()
                        .template ConvertTo<float>();
-
       fvals = (fvals * inv_mults[j] + simd_biases[j]);
       float32x4x4_t dists1, dists2;
       dists1.val[0] = (*fvals[0]).vect_f32;
@@ -388,8 +386,10 @@ SCANN_SSE4_INLINE void GetTopFloatDistancesImpl(
           dp_idx = args.datapoint_translation_predicate(dp_idx);
         }
 
-        const bool needs_gc =
-            topn_mutators[j].Push(dp_idx, distances_buffer[offset]);
+        // DCHECK_LE(distances_buffer[offset],
+        //           topn_mutators[j].epsilon() + (*inv_mults[j])[0]);
+        const bool needs_gc = topn_mutators[j].PushNoEpsilonCheck(
+            dp_idx, distances_buffer[offset]);
         if (ABSL_PREDICT_FALSE(needs_gc)) {
           topn_mutators[j].GarbageCollect();
 

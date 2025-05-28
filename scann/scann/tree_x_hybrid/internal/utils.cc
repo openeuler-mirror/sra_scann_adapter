@@ -14,10 +14,16 @@
 
 #include "scann/tree_x_hybrid/internal/utils.h"
 
+#include "absl/types/span.h"
+
+#include <cstdint>
+
+#include "scann/utils/common.h"
+
 namespace research_scann {
 
 StatusOr<bool> ValidateDatapointsByToken(
-    const vector<std::vector<DatapointIndex>>& datapoints_by_token,
+    absl::Span<const std::vector<DatapointIndex>> datapoints_by_token,
     DatapointIndex num_datapoints) {
   bool is_disjoint = true;
 
@@ -71,6 +77,37 @@ StatusOr<bool> ValidateDatapointsByToken(
   }
 
   return is_disjoint;
+}
+
+vector<uint32_t> SizeByPartition(
+    ConstSpan<std::vector<DatapointIndex>> datapoints_by_token) {
+  vector<uint32_t> result(datapoints_by_token.size());
+  for (size_t i : IndicesOf(datapoints_by_token)) {
+    result[i] = datapoints_by_token[i].size();
+  }
+  return result;
+}
+
+void DeduplicateDatabaseSpilledResults(NNResultsVector* results,
+                                       size_t final_size) {
+  DCHECK_GT(final_size, 0);
+  DCHECK_LE(results->size() / 2, final_size);
+  flat_hash_map<DatapointIndex, float> map;
+  map.reserve(results->size());
+  for (const auto& neighbor : *results) {
+    auto [it, was_inserted] = map.insert(neighbor);
+    if (!was_inserted) {
+      it->second = 0.5f * it->second + 0.5f * neighbor.second;
+    }
+  }
+  std::copy(map.begin(), map.end(), results->begin());
+  results->resize(map.size());
+  if (results->size() > final_size) {
+    NthElementBranchOptimized(results->begin(),
+                              results->begin() + final_size - 1, results->end(),
+                              DistanceComparatorBranchOptimized());
+    results->resize(final_size);
+  }
 }
 
 }  // namespace research_scann
