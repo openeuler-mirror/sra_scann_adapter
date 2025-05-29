@@ -21,10 +21,11 @@ function ann_b_batch_expand_multiprocess() {
       dataDir=${project_path}/ann-benchmarks/data/${data}.hdf5
       configDir=${project_path}/ann-benchmarks/ann_benchmarks/algorithms/scann/cpp_test/config-${data}.config
  
-      time numactl -N 0 -m 0 -- ./bazel_bin/eval --dataDir=$dataDir --configDir=$configDir --numRuns=8&
-      #time numactl -N 1 -m 1 -- ./bazel_bin/eval --dataDir=$dataDir --configDir=$configDir --numRuns=8&
-      #time numactl -N 2 -m 2 -- ./bazel_bin/eval --dataDir=$dataDir --configDir=$configDir --numRuns=8&
-      #time numactl -N 3 -m 3 -- ./bazel_bin/eval --dataDir=$dataDir --configDir=$configDir --numRuns=8&
+      # 此处修改eval（由bazel编译）或eval_cmake（由cmake编译）
+      time numactl -N 0 -m 0 -- ./eval_cmake --dataDir=$dataDir --configDir=$configDir --numRuns=8&
+      #time numactl -N 1 -m 1 -- ./eval_cmake --dataDir=$dataDir --configDir=$configDir --numRuns=8&
+      #time numactl -N 2 -m 2 -- ./eval_cmake --dataDir=$dataDir --configDir=$configDir --numRuns=8&
+      #time numactl -N 3 -m 3 -- ./eval_cmake --dataDir=$dataDir --configDir=$configDir --numRuns=8&
  
       wait
     done

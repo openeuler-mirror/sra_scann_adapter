@@ -71,7 +71,8 @@ function ann_b_batch_expand_multiprocess() {
 
 function ann_b_batch_expand_multiprocess_plot_results() {
   for ((i=1; i<=$1; i++)); do
-    for data in glove-100-angular deep-image-96-angular fashion-mnist-784-euclidean sift-128-euclidean gist-960-euclidean; do
+    #for data in glove-100-angular deep-image-96-angular fashion-mnist-784-euclidean sift-128-euclidean gist-960-euclidean; do
+    for data in sift-128-euclidean; do
      python plot.py --dataset ${data} --recompute --batch --x-scale log --y-scale log
     done
   done
