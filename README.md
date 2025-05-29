@@ -25,7 +25,7 @@ KScaNN依赖基于鲲鹏优化的开源ScaNN以提供完整的功能。因此安
 | GloVe         | 100  | 1183514 | 10000 | Angular   | 英文单词向量   |
 | DEEP1B        | 96   | 9990000 | 10000 | Angular   | 图像向量     |
 | GIST          | 960  | 1000000 | 1000  | Euclidean | 图像GIST特征 |
-| SIFT          | 128  | 1000000 | 10000 | Euclidean | 图像GIST特征 |
+| SIFT          | 128  | 1000000 | 10000 | Euclidean | 图像SIFT特征 |
 | Fashion-MNIST | 784  | 60000   | 10000 | Euclidean | 灰度图像向量   |
 
 #### 3.2 操作步骤
