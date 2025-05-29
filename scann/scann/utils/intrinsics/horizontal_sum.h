@@ -48,7 +48,11 @@ SCANN_INLINE void HorizontalSum4X(Simd<FloatT> a, Simd<FloatT> b,
 namespace sse4 {
 
 SCANN_INLINE float HorizontalSum(Sse4<float> x) {
-  return _mm_vector_add_ps(*x);
+  x += Sse4<float>(_mm_shuffle_ps(*x, *x, 0b11'10'11'10));
+
+  x += Sse4<float>(_mm_shuffle_ps(*x, *x, 0b11'10'01'01));
+
+  return x.GetLowElement();
 }
 
 SCANN_INLINE double HorizontalSum(Sse4<double> x) {

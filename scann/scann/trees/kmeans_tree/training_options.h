@@ -19,8 +19,10 @@
 
 #include <cstdint>
 
+#include "absl/time/time.h"
 #include "scann/oss_wrappers/scann_threadpool.h"
 #include "scann/proto/partitioning.pb.h"
+#include "scann/utils/common.h"
 #include "scann/utils/gmm_utils.h"
 #include "scann/utils/types.h"
 
@@ -35,7 +37,7 @@ struct KMeansTreeTrainingOptions {
       PartitioningConfig::GENERIC;
 
   GmmUtils::Options::PartitionAssignmentType balancing_type =
-      GmmUtils::Options::UNBALANCED;
+      GmmUtils::Options::UNBALANCED_FLOAT32;
 
   GmmUtils::Options::CenterReassignmentType reassignment_type =
       GmmUtils::Options::RANDOM_REASSIGNMENT;

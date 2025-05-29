@@ -18,8 +18,22 @@ sh_binary(
         "//scann/proto:scann_py_pb2",
         "//scann/scann_ops/py:scann",
     ],
-    tags = [
-        "local",
-        "notap",
+    tags = ["notap"],
+)
+
+cc_binary(
+    name = "eval",
+    srcs = ["eval.cpp", "cmdline.h"],
+    copts = [
+        "-O3",
+        "-fopenmp",
+        "-I/usr/include/hdf5/include/",
+    ],
+    linkopts = [
+        "-fopenmp",
+        "-lhdf5",
+    ],
+    deps = [
+        "//scann/scann_ops/cc:scann",
     ],
 )

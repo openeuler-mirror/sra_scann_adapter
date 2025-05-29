@@ -216,7 +216,7 @@ class Avx512<T, kNumRegistersInferred> {
       if constexpr (IsSameAny<T, float>()) {
         return _mm512_loadu_ps(reinterpret_cast<const __m512*>(address));
       } else if constexpr (IsSameAny<T, double>()) {
-        return _mm512_loadu_pd(reinterpret_cast<const double*>(address));
+        return _mm512_loadu_pd(reinterpret_cast<const __m512d*>(address));
       } else {
         return _mm512_loadu_si512(reinterpret_cast<const __m512i*>(address));
       }
@@ -417,6 +417,25 @@ class Avx512<T, kNumRegistersInferred> {
     return BinaryOperatorImpl(*this, other, &BitwiseOr);
   }
 
+  static SCANN_AVX512_INLINE auto BitwiseXor(IntelType a, IntelType b) {
+    if constexpr (IsSame<T, float>()) {
+      return _mm512_xor_ps(a, b);
+    }
+    if constexpr (IsSame<T, double>()) {
+      return _mm512_xor_pd(a, b);
+    }
+    if constexpr (IsSameAny<T, int8_t, uint8_t, int16_t, uint16_t, int32_t,
+                            uint32_t, int64_t, uint64_t>()) {
+      return _mm512_xor_si512(a, b);
+    }
+    LOG(FATAL) << "Undefined";
+  }
+
+  template <size_t kOther>
+  SCANN_AVX512_INLINE auto operator^(const Avx512<T, kOther>& other) const {
+    return BinaryOperatorImpl(*this, other, &BitwiseXor);
+  }
+
   static SCANN_AVX512_INLINE IntelType ShiftRight(IntelType x, int count) {
     static_assert(!IsSameAny<T, int8_t, uint8_t>(),
                   "There's no 8-bit '>>' instruction");
@@ -525,6 +544,11 @@ class Avx512<T, kNumRegistersInferred> {
   template <size_t kOther>
   SCANN_AVX512_INLINE Avx512& operator|=(const Avx512<T, kOther>& other) {
     return AccumulateOperatorImpl(other, &BitwiseOr);
+  }
+
+  template <size_t kOther>
+  SCANN_AVX512_INLINE Avx512& operator^=(const Avx512<T, kOther>& other) {
+    return AccumulateOperatorImpl(other, &BitwiseXor);
   }
 
   SCANN_AVX512_INLINE Avx512& operator<<=(int count) {

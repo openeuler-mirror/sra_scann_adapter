@@ -13,10 +13,13 @@
 // limitations under the License.
 
 #include "scann/distance_measures/one_to_one/l2_distance_avx1.h"
+
+#include "absl/log/check.h"
+#include "scann/data_format/datapoint.h"
+#include "scann/utils/intrinsics/attributes.h"
 #ifdef __aarch64__
 
 #include "scann/utils/intrinsics/avx1.h"
-
 namespace research_scann {
 namespace l2_internal {
 

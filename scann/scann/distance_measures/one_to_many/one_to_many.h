@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-
 #ifndef SCANN_DISTANCE_MEASURES_ONE_TO_MANY_ONE_TO_MANY_H_
 #define SCANN_DISTANCE_MEASURES_ONE_TO_MANY_ONE_TO_MANY_H_
 
@@ -36,7 +34,7 @@
 #include "scann/utils/intrinsics/horizontal_sum.h"
 #include "scann/utils/intrinsics/simd.h"
 #include "scann/utils/types.h"
-#include "tensorflow/core/platform/prefetch.h"
+// #include "tensorflow/core/platform/prefetch.h"
 
 namespace research_scann {
 
@@ -409,14 +407,14 @@ DenseAccumulatingDistanceMeasureOneToManyInternal(
           __m128 v1 = _mm_loadu_ps(f1 + j);
           __m128 v2 = _mm_loadu_ps(f2 + j);
 
-          if (kShouldPrefetch && p0) {
-            ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-                p0 + j);
-            ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-                p1 + j);
-            ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-                p2 + j);
-          }
+          // if (kShouldPrefetch && p0) {
+          //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
+          //       p0 + j);
+          //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
+          //       p1 + j);
+          //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
+          //       p2 + j);
+          // }
 
           a0 = _mm_add_ps(a0, lambdas_vec[0].GetTerm(q, v0));
           a1 = _mm_add_ps(a1, lambdas_vec[1].GetTerm(q, v1));
@@ -532,14 +530,14 @@ DenseAccumulatingDistanceMeasureOneToManyInternalAvx1(
       __m256 v1 = _mm256_loadu_ps(f1 + j);
       __m256 v2 = _mm256_loadu_ps(f2 + j);
 
-      if (kShouldPrefetch && p0) {
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p0 +
-                                                                           j);
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p1 +
-                                                                           j);
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p2 +
-                                                                           j);
-      }
+      // if (kShouldPrefetch && p0) {
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p0 +
+      //                                                                      j);
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p1 +
+      //                                                                      j);
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p2 +
+      //                                                                      j);
+      // }
 
       a0_256 = _mm256_add_ps(a0_256, lambdas_vec[0].GetTerm(q, v0));
       a1_256 = _mm256_add_ps(a1_256, lambdas_vec[1].GetTerm(q, v1));
@@ -556,14 +554,14 @@ DenseAccumulatingDistanceMeasureOneToManyInternalAvx1(
       __m128 v1 = _mm_loadu_ps(f1 + j);
       __m128 v2 = _mm_loadu_ps(f2 + j);
 
-      if (kShouldPrefetch && p0) {
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p0 +
-                                                                           j);
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p1 +
-                                                                           j);
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p2 +
-                                                                           j);
-      }
+      // if (kShouldPrefetch && p0) {
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p0 +
+      //                                                                      j);
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p1 +
+      //                                                                      j);
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p2 +
+      //                                                                      j);
+      // }
 
       a0 = _mm_add_ps(a0, lambdas_vec[0].GetTerm(q, v0));
       a1 = _mm_add_ps(a1, lambdas_vec[1].GetTerm(q, v1));
@@ -670,14 +668,14 @@ DenseAccumulatingDistanceMeasureOneToManyInternalAvx2(
       __m256 v1 = _mm256_loadu_ps(f1 + j);
       __m256 v2 = _mm256_loadu_ps(f2 + j);
 
-      if (kShouldPrefetch && p0) {
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p0 +
-                                                                           j);
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p1 +
-                                                                           j);
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p2 +
-                                                                           j);
-      }
+      // if (kShouldPrefetch && p0) {
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p0 +
+      //                                                                      j);
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p1 +
+      //                                                                      j);
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p2 +
+      //                                                                      j);
+      // }
 
       a0_256 = lambdas_vec[0].FmaTerm(a0_256, q, v0);
       a1_256 = lambdas_vec[1].FmaTerm(a1_256, q, v1);
@@ -694,14 +692,14 @@ DenseAccumulatingDistanceMeasureOneToManyInternalAvx2(
       __m128 v1 = _mm_loadu_ps(f1 + j);
       __m128 v2 = _mm_loadu_ps(f2 + j);
 
-      if (kShouldPrefetch && p0) {
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p0 +
-                                                                           j);
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p1 +
-                                                                           j);
-        ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p2 +
-                                                                           j);
-      }
+      // if (kShouldPrefetch && p0) {
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p0 +
+      //                                                                      j);
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p1 +
+      //                                                                      j);
+      //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(p2 +
+      //                                                                      j);
+      // }
 
       a0 = lambdas_vec[0].FmaTerm(a0, q, v0);
       a1 = lambdas_vec[1].FmaTerm(a1, q, v1);
@@ -869,14 +867,14 @@ DenseAccumulatingDistanceMeasureOneToManyInternal(
           __m128d v1 = _mm_loadu_pd(f1 + j);
           __m128d v2 = _mm_loadu_pd(f2 + j);
 
-          if (kShouldPrefetch && p0) {
-            ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-                p0 + j);
-            ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-                p1 + j);
-            ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-                p2 + j);
-          }
+          // if (kShouldPrefetch && p0) {
+          //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
+          //       p0 + j);
+          //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
+          //       p1 + j);
+          //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
+          //       p2 + j);
+          // }
 
           a0 = _mm_add_pd(a0, lambdas_vec[0].GetTerm(q, v0));
           a1 = _mm_add_pd(a1, lambdas_vec[1].GetTerm(q, v1));
@@ -1005,14 +1003,14 @@ void DenseGeneralHammingDistanceMeasureOneToManyInternal(
           __m128i v2 =
               _mm_loadu_si128(reinterpret_cast<const __m128i*>(i2 + j));
 
-          if (kShouldPrefetch && p0) {
-            ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-                p0 + j);
-            ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-                p1 + j);
-            ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-                p2 + j);
-          }
+          // if (kShouldPrefetch && p0) {
+          //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
+          //       p0 + j);
+          //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
+          //       p1 + j);
+          //   ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
+          //       p2 + j);
+          // }
 
           a0 = _mm_sub_epi32(a0, _mm_cmpeq_epi32(q, v0));
           a1 = _mm_sub_epi32(a1, _mm_cmpeq_epi32(q, v1));

@@ -19,8 +19,12 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <tuple>
+#include <filesystem>
+#include <uuid/uuid.h>
 
 #include "absl/memory/memory.h"
+#include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "google/protobuf/text_format.h"
@@ -29,14 +33,27 @@
 #include "scann/base/single_machine_factory_options.h"
 #include "scann/base/single_machine_factory_scann.h"
 #include "scann/data_format/dataset.h"
-#include "scann/oss_wrappers/scann_status.h"
 #include "scann/scann_ops/scann_assets.pb.h"
+#include "scann/utils/common.h"
 #include "scann/utils/threads.h"
 
 namespace research_scann {
 
 class ScannInterface {
  public:
+  using ScannArtifacts =
+      std::tuple<ScannConfig, shared_ptr<DenseDataset<float>>,
+                 SingleMachineFactoryOptions>;
+
+  static StatusOr<ScannArtifacts> LoadArtifacts(const ScannConfig& config,
+                                                const ScannAssets& orig_assets);
+  static StatusOr<ScannArtifacts> LoadArtifacts(
+      const std::string& artifacts_dir,
+      const std::string& scann_assets_pbtxt = "");
+
+  static StatusOr<std::unique_ptr<SingleMachineSearcherBase<float>>>
+  CreateSearcher(ScannArtifacts artifacts);
+
   Status Initialize(const std::string& config_pbtxt,
                     const std::string& scann_assets_pbtxt);
   Status Initialize(ScannConfig config, SingleMachineFactoryOptions opts,
@@ -48,9 +65,14 @@ class ScannInterface {
                     ConstSpan<float> dp_norms, DatapointIndex n_points);
   Status Initialize(ConstSpan<float> dataset, DatapointIndex n_points,
                     const std::string& config, int training_threads);
-  Status Initialize(
-      shared_ptr<DenseDataset<float>> dataset,
-      SingleMachineFactoryOptions opts = SingleMachineFactoryOptions());
+  Status Initialize(ScannArtifacts artifacts);
+
+  // StatusOr<typename SingleMachineSearcherBase<float>::Mutator*> GetMutator()
+  //     const {
+  //   return scann_->GetMutator();
+  // }
+
+  StatusOr<ScannConfig> RetrainAndReindex(const string& config);
 
   Status Search(const DatapointPtr<float> query, NNResultsVector* res,
                 int final_nn, int pre_reorder_nn, int leaves) const;
@@ -59,12 +81,55 @@ class ScannInterface {
                        int pre_reorder_nn, int leaves) const;
   Status SearchBatchedParallel(const DenseDataset<float>& queries,
                                MutableSpan<NNResultsVector> res, int final_nn,
-                               int pre_reorder_nn, int leaves, int chosenBatchSize = 256) const;
-  void SearchAdditionalParams(float adp_threshold, int adp_refined, int leaves_to_search) const {
-      pAdaptiveModel->SetSearchParamsAndMode(adp_threshold, adp_refined, leaves_to_search);
-  };
-  StatusOr<ScannAssets> Serialize(std::string path);
+                               int pre_reorder_nn, int leaves,
+                               int batch_size = 256) const;
+  StatusOr<ScannAssets> Serialize(std::string path, bool relative_path = false);
+  StatusOr<ScannAssets> SerializeForAll(std::string path, bool relative_path = false);
   StatusOr<SingleMachineFactoryOptions> ExtractOptions();
+
+  int SerializeToMemory(uint8_t *&dataPtr, size_t& length);
+  int LoadFromMemory(uint8_t *&dataPtr, size_t& length);
+
+  void SetSoPath(const std::string& path) {
+    if (scann_) {
+      scann_->SetSoPath(path);
+    }
+  }
+
+  int GetNum() const {
+    int total_num = static_cast<int>(n_points());
+    return total_num;
+  }
+
+  int GetDim() const{
+    int dim = static_cast<int>(dimensionality());
+    return dim;
+  }
+
+  std::string CreateUuidPath(std::string path)
+  {
+      uuid_t uuid;
+      uuid_generate(uuid);
+
+      char uuid_str[37];
+      uuid_unparse(uuid, uuid_str);
+
+      std::string new_path = path;
+      new_path.append(std::string(uuid_str)).append("_libadaptivemodel.so");
+      return new_path;
+  }
+
+  void Delete(const std::string& workpath)
+  {
+      std::filesystem::path dirPath(workpath);
+      try {
+          if (std::filesystem::exists(dirPath) && std::filesystem::is_directory(dirPath)) {
+              std::filesystem::remove_all(dirPath);
+          }
+      } catch (const std::filesystem::filesystem_error& e) {
+          std::cerr << "Error: " << e.what() << std::endl;
+      }
+  }
 
   template <typename T_idx>
   void ReshapeNNResult(const NNResultsVector& res, T_idx* indices,
@@ -77,23 +142,34 @@ class ScannInterface {
     return scann_->SharedFloatDatasetIfNeeded();
   }
 
-  size_t n_points() const { return n_points_; }
+  size_t n_points() const { return scann_->DatasetSize().value(); }
   DimensionIndex dimensionality() const { return dimensionality_; }
-  const ScannConfig* config() const { return &config_; }
+  const ScannConfig* config() {
+    if (scann_->config().has_value()) config_ = *scann_->config();
+    return &config_;
+  }
+
+  std::shared_ptr<ThreadPool> parallel_query_pool() const {
+    return parallel_query_pool_;
+  }
 
   void SetNumThreads(int num_threads) {
     parallel_query_pool_ = StartThreadPool("ScannQueryingPool", num_threads);
   }
 
+  void SearchAdditionalParams(float adp_threshold, int adp_refined, int leaves_to_search) const {
+    pAdaptiveModel->SetSearchParamsAndMode(adp_threshold, adp_refined, leaves_to_search);
+  };
+
  private:
   void CollectTrainData(const float *pdata, int nb, int dim, int n_leaves, int nprobe);
   void findTruth(std::vector<int64_t> &approximateGT, DenseDataset<float> &ptr, int qsize, int n_leaves);
+
   SearchParameters GetSearchParameters(int final_nn, int pre_reorder_nn,
                                        int leaves) const;
   vector<SearchParameters> GetSearchParametersBatched(
       int batch_size, int final_nn, int pre_reorder_nn, int leaves,
       bool set_unspecified) const;
-  size_t n_points_;
   DimensionIndex dimensionality_;
   std::unique_ptr<SingleMachineSearcherBase<float>> scann_;
   ScannConfig config_;
@@ -102,7 +178,9 @@ class ScannInterface {
 
   size_t min_batch_size_;
 
-  std::unique_ptr<ThreadPool> parallel_query_pool_;
+  std::string so_path_;
+
+  std::shared_ptr<ThreadPool> parallel_query_pool_;
 };
 
 template <typename T_idx>
@@ -130,6 +208,12 @@ void ScannInterface::ReshapeBatchedNNResult(ConstSpan<NNResultsVector> res,
       *(distances++) = std::numeric_limits<float>::quiet_NaN();
     }
   }
+}
+
+template <typename T>
+Status ParseTextProto(T* proto, const string& proto_str) {
+  ::google::protobuf::TextFormat::ParseFromString(proto_str, proto);
+  return OkStatus();
 }
 
 }  // namespace research_scann

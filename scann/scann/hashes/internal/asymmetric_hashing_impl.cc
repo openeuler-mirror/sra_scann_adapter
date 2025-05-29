@@ -21,7 +21,9 @@
 #include <utility>
 
 #include "absl/random/distributions.h"
+#include "absl/status/status.h"
 #include "scann/data_format/datapoint.h"
+#include "scann/data_format/dataset.h"
 #include "scann/distance_measures/one_to_many/one_to_many.h"
 #include "scann/hashes/internal/asymmetric_hashing_postprocess.h"
 #include "scann/oss_wrappers/scann_random.h"
@@ -31,8 +33,6 @@
 #include "scann/utils/gmm_utils.h"
 #include "scann/utils/top_n_amortized_constant.h"
 #include "scann/utils/types.h"
-#include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/core/status.h"
 
 namespace research_scann {
 namespace asymmetric_hashing_internal {
@@ -47,9 +47,10 @@ StatusOr<vector<DenseDataset<double>>> AhImpl<T>::TrainAsymmetricHashing(
 
   ChunkedDatapoint<double> chunked_vec;
 
+  SCANN_RET_CHECK(opts.projector());
   if (opts.preprocessing_function()) {
-    TF_ASSIGN_OR_RETURN(Datapoint<T> preprocessed,
-                        opts.preprocessing_function()(dataset[0]));
+    SCANN_ASSIGN_OR_RETURN(Datapoint<T> preprocessed,
+                           opts.preprocessing_function()(dataset[0]));
     SCANN_RETURN_IF_ERROR(
         opts.projector()->ProjectInput(preprocessed.ToPtr(), &chunked_vec));
   } else {
@@ -115,8 +116,8 @@ StatusOr<vector<DenseDataset<double>>> AhImpl<T>::TrainAsymmetricHashing(
   if (opts.preprocessing_function()) {
     for (DatapointIndex i : sample) {
       SCANN_RETURN_IF_ERROR(VerifyAllFinite(dataset[i].values_span()));
-      TF_ASSIGN_OR_RETURN(Datapoint<T> preprocessed,
-                          opts.preprocessing_function()(dataset[i]));
+      SCANN_ASSIGN_OR_RETURN(Datapoint<T> preprocessed,
+                             opts.preprocessing_function()(dataset[i]));
       SCANN_RETURN_IF_ERROR(VerifyAllFinite(preprocessed.values()));
       SCANN_RETURN_IF_ERROR(
           opts.projector()->ProjectInput(preprocessed.ToPtr(), &chunked_vec));
@@ -131,12 +132,13 @@ StatusOr<vector<DenseDataset<double>>> AhImpl<T>::TrainAsymmetricHashing(
     }
   }
 
-  auto quantization_distance = opts.quantization_distance();
+  const auto& quantization_distance = opts.quantization_distance();
   GmmUtils::Options gmm_opts;
   gmm_opts.seed = opts.config().clustering_seed();
   gmm_opts.max_iterations = opts.config().max_clustering_iterations();
   gmm_opts.epsilon = opts.config().clustering_convergence_tolerance();
   gmm_opts.parallelization_pool = std::move(pool);
+  gmm_opts.partition_assignment_type = gmm_opts.UNBALANCED_FLOAT32;
   GmmUtils gmm(quantization_distance, gmm_opts);
 
   vector<DenseDataset<double>> all_centers(num_blocks);
@@ -150,7 +152,7 @@ StatusOr<vector<DenseDataset<double>>> AhImpl<T>::TrainAsymmetricHashing(
     for (size_t center_idx : IndicesOf(centers)) {
       SCANN_RETURN_IF_ERROR(VerifyAllFinite(centers[center_idx].values_span()));
       if (!opts.config().use_norm_biasing_correction()) continue;
-      TF_ASSIGN_OR_RETURN(
+      SCANN_ASSIGN_OR_RETURN(
           const double norm_bias_correction,
           ComputeNormBiasCorrection(chunked_dataset[i], centers[center_idx],
                                     subpartitions[center_idx]));
@@ -166,10 +168,10 @@ StatusOr<vector<DenseDataset<double>>> AhImpl<T>::TrainAsymmetricHashing(
 
     vector<uint32_t> centers_permutation(centers.size());
     std::iota(centers_permutation.begin(), centers_permutation.end(), 0U);
-    std::sort(centers_permutation.begin(), centers_permutation.end(),
-              [&subpartitions](uint32_t a, uint32_t b) {
-                return subpartitions[a].size() > subpartitions[b].size();
-              });
+    std::stable_sort(centers_permutation.begin(), centers_permutation.end(),
+                     [&subpartitions](uint32_t a, uint32_t b) {
+                       return subpartitions[a].size() > subpartitions[b].size();
+                     });
 
     constexpr size_t kAssumedCacheLineSize = 64;
     constexpr size_t kFloatsPerCacheLine =
@@ -438,11 +440,12 @@ Status AhImpl<T>::IndexDatapointNoiseShaped(
   SCANN_RET_CHECK_EQ(result.size(), centers.size());
   SCANN_RET_CHECK_EQ(maybe_residual_dptr.dimensionality(),
                      original_dptr.dimensionality());
-  TF_ASSIGN_OR_RETURN(auto residual_stats,
-                      ComputeResidualStats(maybe_residual_dptr, original_dptr,
-                                           centers, projection));
-
   SCANN_RETURN_IF_ERROR(ValidateNoiseShapingParams(threshold, eta));
+  SCANN_ASSIGN_OR_RETURN(
+      auto residual_stats,
+      ComputeResidualStats(maybe_residual_dptr, original_dptr, centers,
+                           projection));
+
   const double parallel_cost_multiplier =
       std::isnan(eta) ? ComputeParallelCostMultiplier(
                             threshold, SquaredL2Norm(original_dptr),
@@ -585,7 +588,7 @@ vector<T> ConvertLookupToFixedPoint(
   if (conversion_options.multiplier_quantile() == 1.0f) {
     if (conversion_options.float_to_int_conversion_method() == kRound) {
       return ConvertLookupToFixedPointImpl<T>(
-          raw_lookup, [](float f) { return std::lround(f); }, *multiplier);
+          raw_lookup, [](float f) { return std::round(f); }, *multiplier);
     } else {
       return ConvertLookupToFixedPointImpl<T>(
           raw_lookup, [](float f) { return static_cast<SignedT>(f); },
@@ -600,7 +603,7 @@ vector<T> ConvertLookupToFixedPoint(
       return ConvertLookupToFixedPointImpl<T>(
           raw_lookup,
           [&](float f) {
-            return static_cast<SignedT>(std::lround(compress_to_bounds(f)));
+            return static_cast<SignedT>(std::round(compress_to_bounds(f)));
           },
           *multiplier);
     } else {
@@ -656,7 +659,6 @@ bool CanUseInt16Accumulator(ConstSpan<uint8_t> lookup_table,
 }
 
 #include "scann/hw_alg/include/lut16dep_helper.h"
-
 template class UnrestrictedIndexIterator<6, IdentityPostprocessFunctor>;
 template class UnrestrictedIndexIterator<6, AddBiasFunctor>;
 template class UnrestrictedIndexIterator<6, LimitedInnerFunctor>;

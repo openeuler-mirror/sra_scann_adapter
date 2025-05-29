@@ -28,20 +28,34 @@
 #include <vector>
 
 #include "absl/container/flat_hash_set.h"
+#include "scann/data_format/datapoint.h"
 #include "scann/data_format/dataset.h"
+#include "scann/distance_measures/distance_measure_base.h"
 #include "scann/distance_measures/one_to_one/l2_distance.h"
+#include "scann/oss_wrappers/scann_castops.h"
 #include "scann/oss_wrappers/scann_random.h"
 #include "scann/proto/partitioning.pb.h"
+#include "scann/trees/kmeans_tree/kmeans_tree.pb.h"
+#include "scann/trees/kmeans_tree/training_options.h"
+#include "scann/utils/common.h"
+#include "scann/utils/fast_top_neighbors.h"
 #include "scann/utils/gmm_utils.h"
-#include "scann/utils/parallel_for.h"
 #include "scann/utils/scalar_quantization_helpers.h"
 #include "scann/utils/types.h"
 #include "scann/utils/util_functions.h"
-#include "tensorflow/core/platform/cpu_info.h"
 
 namespace research_scann {
 
-KMeansTreeNode::KMeansTreeNode() {}
+KMeansTreeNode::KMeansTreeNode() = default;
+
+KMeansTreeNode KMeansTreeNode::CreateFlat(DenseDataset<float> centers) {
+  KMeansTreeNode root;
+  root.float_centers_ = std::move(centers);
+  root.children_ = vector<KMeansTreeNode>(root.float_centers_.size());
+  root.NumberLeaves(0);
+  root.MaybeInitializeThreadSharding();
+  return root;
+}
 
 void KMeansTreeNode::Reset() {
   leaf_id_ = -1;
@@ -127,7 +141,7 @@ Status PostprocessDistancesForSpilling(
 
     float spill_thresh = std::nextafter(DoubleToFloat(spilling_threshold),
                                         std::numeric_limits<float>::infinity());
-    TF_ASSIGN_OR_RETURN(
+    SCANN_ASSIGN_OR_RETURN(
         float max_dist_to_consider,
         ComputeThreshold(nearest_center_distance, spill_thresh, spilling_type));
     epsilon = std::nextafter(max_dist_to_consider,
@@ -181,7 +195,7 @@ Status KMeansTreeNode::Train(const Dataset& training_data,
       opts->learned_spilling_type;
   if (spilling_type != DatabaseSpillingConfig::NO_SPILLING &&
       opts->per_node_spilling_factor > 1.0) {
-    TF_ASSIGN_OR_RETURN(
+    SCANN_ASSIGN_OR_RETURN(
         learned_spilling_threshold_,
         gmm.ComputeSpillingThreshold(
             training_data, indices_, centers, opts->learned_spilling_type,
@@ -256,6 +270,37 @@ void KMeansTreeNode::CreateFixedPointCenters() {
       ScalarQuantizeFloatDataset(float_centers_, 1.0, NAN);
   inv_int8_multipliers_ = std::move(results.inverse_multiplier_by_dimension);
   fixed_point_centers_ = std::move(results.quantized_dataset);
+
+  std::vector<float32_t>tmp_fp_centers_;
+  tmp_fp_centers_.assign(float_centers_.data().begin(), float_centers_.data().end());
+  int num_elements = tmp_fp_centers_.size();
+  if (num_elements > 0) {
+    LOG(INFO) << "Self-add uint8_t quant. elements: " << num_elements << "\n";
+    float _max = tmp_fp_centers_[0], _min = tmp_fp_centers_[0];
+    for (size_t i = 0; i < num_elements; ++i) {
+        if (tmp_fp_centers_[i] > _max) {
+            _max = tmp_fp_centers_[i];
+        } else if (tmp_fp_centers_[i] < _min) {
+            _min = tmp_fp_centers_[i];
+        }
+    }
+    constexpr int range = 256;
+    int max_range = (int)(range * 0.9 + 0.5);
+    int min_range = (int)(range * 0.1 + 0.5);
+    if (_max > max_range && _max < range && _min < min_range && _min > -1) {
+        scale_ = 1.0;
+        bias_ = 0.0;
+    } else  {
+        scale_ = (float) (range - 1) / (_max - _min);
+        bias_ = _min * scale_;
+    }
+    LOG(INFO) << "Self-add uint8_t quant, scale: " << scale_ << ", bias_: " << bias_;
+ 
+    l2_raw_point_centers_.resize(num_elements);
+    for (int i = 0; i < num_elements; ++i) {
+      l2_raw_point_centers_[i] = (uint8_t)(tmp_fp_centers_[i] * scale_ + bias_ + 0.5);
+    }
+  }
 
   for (KMeansTreeNode& child : children_) {
     child.CreateFixedPointCenters();

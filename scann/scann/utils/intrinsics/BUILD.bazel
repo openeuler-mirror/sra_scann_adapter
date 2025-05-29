@@ -2,7 +2,6 @@ package(
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
-
 cc_import(
     name = "avx2ki",
     static_library = "//scann/hw_alg:lib/libsubavx2ki.a",  # Path to your static library
@@ -72,10 +71,9 @@ cc_library(
     hdrs = ["flags.h"],
     tags = ["local"],
     deps = [
-        "//scann/oss_wrappers:tf_dependency",
+        "//scann/oss_wrappers:scann_cpu_info",
         "//scann/utils:common",
         "//scann/utils:types",
-        "@com_google_absl//absl/base",
         "@com_google_absl//absl/flags:flag",
     ],
 )

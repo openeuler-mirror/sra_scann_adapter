@@ -9,7 +9,8 @@ cc_import(
             "include/kscann.h",
             "include/IadpModel.h",
             "include/lut16dep.h",
-            "include/k_reorder_helper_class.h"
+            "include/k_reorder_helper_class.h",
+            "include/L2.h"
         ],
     shared_library = "lib/libkscann.so",
 )

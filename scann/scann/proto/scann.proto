@@ -26,6 +26,7 @@ import "scann/proto/exact_reordering.proto";
 import "scann/proto/hash.proto";
 import "scann/proto/input_output.proto";
 import "scann/proto/metadata.proto";
+import "scann/proto/min_distance.proto";
 import "scann/proto/partitioning.proto";
 
 message ScannConfig {
@@ -36,6 +37,8 @@ message ScannConfig {
   optional int32 num_neighbors = 3 [default = 2147483647];
 
   optional float epsilon_distance = 4 [default = inf];
+
+  optional MinDistanceConfig min_distance = 44;
 
   reserved 24, 37, 39;
 
@@ -86,6 +89,7 @@ message ScannConfig {
   reserved "inverted_index";
   reserved "incremental_updates";
   reserved "auto_tuning";
+  reserved "scoring_extension";
 
   reserved 16, 33, 18;
   reserved "chunked_inverted_index";

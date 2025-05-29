@@ -15,8 +15,11 @@
 #include "scann/distance_measures/one_to_one/l1_distance_sse4.h"
 
 #include <cstdint>
-#ifdef __aarch64__
 
+#include "absl/log/check.h"
+#include "scann/data_format/datapoint.h"
+#include "scann/utils/intrinsics/attributes.h"
+#ifdef __aarch64__
 #include "scann/utils/intrinsics/sse4.h"
 
 namespace research_scann {
@@ -78,12 +81,14 @@ SCANN_SSE4_OUTLINE double DenseL1NormSse4(const DatapointPtr<float>& a,
   }
 
   if (aptr < aend) {
+    // accumulator0[0] += std::abs(aptr[0] - bptr[0]);
     accumulator0.vect_f32[0] += std::abs(aptr[0] - bptr[0]);
   }
 
   __m128 accumulator = _mm_add_ps(accumulator0, accumulator1);
   accumulator = _mm_hadd_ps(accumulator, accumulator);
   accumulator = _mm_hadd_ps(accumulator, accumulator);
+  // return accumulator[0];
   return accumulator.vect_f32[0];
 }
 

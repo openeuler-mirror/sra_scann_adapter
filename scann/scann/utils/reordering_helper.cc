@@ -14,44 +14,41 @@
 
 #include "scann/utils/reordering_helper.h"
 
+#include <stddef.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <utility>
 #include <vector>
 
-#include "absl/strings/str_format.h"
+#include "absl/base/optimization.h"
+#include "absl/base/prefetch.h"
+#include "absl/log/check.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
+#include "scann/brute_force/brute_force.h"
+#include "scann/brute_force/scalar_quantized_brute_force.h"
 #include "scann/data_format/datapoint.h"
 #include "scann/data_format/dataset.h"
 #include "scann/distance_measures/one_to_many/one_to_many.h"
+#include "scann/distance_measures/one_to_one/dot_product.h"
+#include "scann/distance_measures/one_to_one/l2_distance.h"
 #include "scann/oss_wrappers/scann_down_cast.h"
 #include "scann/oss_wrappers/scann_status.h"
 #include "scann/utils/common.h"
 #include "scann/utils/datapoint_utils.h"
-#include "scann/utils/internal/avx2_funcs.h"
-#include "scann/utils/internal/avx_funcs.h"
-#include "scann/utils/intrinsics/horizontal_sum.h"
 #include "scann/utils/scalar_quantization_helpers.h"
 #include "scann/utils/types.h"
-#include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/core/status.h"
-#include "tensorflow/core/platform/prefetch.h"
 
 namespace research_scann {
 namespace one_to_many_low_level {
-
-template <typename ResultElemT, typename CallbackFunctor>
-SCANN_INLINE void DenseDotProductDistanceOneToManyInt8FloatDispatch(
-    const DatapointPtr<float>& query, const DenseDataset<int8_t>& database,
-    MutableSpan<ResultElemT> result, CallbackFunctor* __restrict__ callback) {
-  auto view = DefaultDenseDatasetView<int8_t>(database);
-  DenseDotProductDistanceOneToManyInt8FloatLowLevel<
-      DefaultDenseDatasetView<int8_t>, false, DatapointIndex, ResultElemT,
-      CallbackFunctor>(query.values(), &view, nullptr, result, callback);
-}
 
 using NeighborResult = std::pair<DatapointIndex, float>;
 
@@ -123,8 +120,7 @@ class SetSquaredL2DistanceFunctor {
   }
 
   SCANN_INLINE void prefetch(size_t index) {
-    ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-        &dp_squared_l2_norms_[index]);
+    absl::PrefetchToLocalCache(&dp_squared_l2_norms_[index]);
   }
 
  private:
@@ -153,8 +149,7 @@ class SetSquaredL2Top1Functor {
   }
 
   SCANN_INLINE void prefetch(size_t index) {
-    ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-        &dp_squared_l2_norms_[index]);
+    absl::PrefetchToLocalCache(&dp_squared_l2_norms_[index]);
   }
 
   std::pair<DatapointIndex, float> Top1Pair() {
@@ -198,8 +193,7 @@ class SetLimitedInnerDistanceFunctor {
   }
 
   SCANN_INLINE void prefetch(size_t index) {
-    ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-        &inverse_database_l2_norms_[index]);
+    absl::PrefetchToLocalCache(&inverse_database_l2_norms_[index]);
   }
 
  private:
@@ -230,8 +224,7 @@ class SetLimitedInnerTop1Functor {
   }
 
   SCANN_INLINE void prefetch(size_t index) {
-    ::tensorflow::port::prefetch<::tensorflow::port::PREFETCH_HINT_T0>(
-        &inverse_database_l2_norms_[index]);
+    absl::PrefetchToLocalCache(&inverse_database_l2_norms_[index]);
   }
 
   std::pair<DatapointIndex, float> Top1Pair() {
@@ -288,7 +281,16 @@ Status ExactReorderingHelper<T>::ComputeDistancesForReordering(
 }
 
 template <typename T>
-StatusOr<std::pair<DatapointIndex, float>>
+StatusOrPtr<SingleMachineSearcherBase<T>>
+ExactReorderingHelper<T>::CreateBruteForceSearcher(int32_t num_neighbors,
+                                                   float epsilon) const {
+  return make_unique<BruteForceSearcher<T>>(exact_reordering_distance_,
+                                            exact_reordering_dataset_,
+                                            num_neighbors, epsilon);
+}
+
+template <typename T>
+absl::StatusOr<std::pair<DatapointIndex, float>>
 ExactReorderingHelper<T>::ComputeTop1ReorderingDistance(
     const DatapointPtr<T>& query, NNResultsVector* result) const {
   if (query.IsDense() && exact_reordering_dataset_->IsDense()) {
@@ -322,40 +324,111 @@ ExactReorderingHelper<T>::ComputeTop1ReorderingDistance(
   return std::make_pair(idx, smallest);
 }
 
+class FixedPointFloatDenseDotProductReorderingHelper::Mutator final
+    : public ReorderingInterface<float>::Mutator {
+ public:
+  explicit Mutator(FixedPointFloatDenseDotProductReorderingHelper* helper)
+      : helper_(helper),
+        multipliers_(helper->inverse_multipliers_->size()),
+        dataset_mutator_(helper_->fixed_point_dataset_->GetMutator().value()) {
+    ConstSpan<float> inv_multipliers = *helper->inverse_multipliers_;
+    for (size_t i : IndicesOf(inv_multipliers)) {
+      multipliers_[i] = 1.0 / inv_multipliers[i];
+    }
+  }
+
+  StatusOr<DatapointIndex> AddDatapoint(const DatapointPtr<float>& dptr) final {
+    vector<int8_t> storage(dptr.dimensionality());
+    DatapointPtr<int8_t> quantized =
+        std::isfinite(helper_->noise_shaping_threshold_)
+            ? ScalarQuantizeFloatDatapointWithNoiseShaping(
+                  dptr, multipliers_, helper_->noise_shaping_threshold_,
+                  &storage)
+            : ScalarQuantizeFloatDatapoint(dptr, multipliers_, &storage);
+    SCANN_RETURN_IF_ERROR(dataset_mutator_->AddDatapoint(quantized, ""));
+    return helper_->fixed_point_dataset_->size() - 1;
+  }
+  StatusOr<DatapointIndex> RemoveDatapoint(DatapointIndex idx) final {
+    SCANN_RETURN_IF_ERROR(dataset_mutator_->RemoveDatapoint(idx));
+    return helper_->fixed_point_dataset_->size();
+  }
+  Status UpdateDatapoint(const DatapointPtr<float>& dptr,
+                         DatapointIndex idx) final {
+    vector<int8_t> storage(dptr.dimensionality());
+    DatapointPtr<int8_t> quantized =
+        std::isfinite(helper_->noise_shaping_threshold_)
+            ? ScalarQuantizeFloatDatapointWithNoiseShaping(
+                  dptr, multipliers_, helper_->noise_shaping_threshold_,
+                  &storage)
+            : ScalarQuantizeFloatDatapoint(dptr, multipliers_, &storage);
+    return dataset_mutator_->UpdateDatapoint(quantized, idx);
+  }
+  void Reserve(DatapointIndex num_datapoints) final {
+    dataset_mutator_->Reserve(num_datapoints);
+  }
+
+  Status Reconstruct(DatapointIndex idx, MutableSpan<float> output) const {
+    return helper_->Reconstruct(idx, output);
+  }
+
+  shared_ptr<const Dataset> dataset() const { return helper_->dataset(); }
+
+ private:
+  FixedPointFloatDenseDotProductReorderingHelper* helper_ = nullptr;
+  vector<float> multipliers_;
+  TypedDataset<int8_t>::Mutator* dataset_mutator_;
+};
+
 FixedPointFloatDenseDotProductReorderingHelper::
     FixedPointFloatDenseDotProductReorderingHelper(
         const DenseDataset<float>& exact_reordering_dataset,
-        float fixed_point_multiplier_quantile) {
+        float fixed_point_multiplier_quantile, float noise_shaping_threshold,
+        ThreadPool* pool)
+    : noise_shaping_threshold_(noise_shaping_threshold) {
   ScalarQuantizationResults quantization_results = ScalarQuantizeFloatDataset(
-      exact_reordering_dataset, fixed_point_multiplier_quantile);
+      exact_reordering_dataset, fixed_point_multiplier_quantile,
+      noise_shaping_threshold_, pool);
   fixed_point_dataset_ = std::make_shared<DenseDataset<int8_t>>(
       std::move(quantization_results.quantized_dataset));
-  inverse_multipliers_ =
-      std::move(quantization_results.inverse_multiplier_by_dimension);
+  inverse_multipliers_ = make_shared<vector<float>>(
+      std::move(quantization_results.inverse_multiplier_by_dimension));
 }
 
 FixedPointFloatDenseDotProductReorderingHelper::
     FixedPointFloatDenseDotProductReorderingHelper(
         shared_ptr<DenseDataset<int8_t>> fixed_point_dataset,
-        const std::vector<float>& multiplier_by_dimension)
-    : fixed_point_dataset_(std::move(fixed_point_dataset)) {
+        absl::Span<const float> multiplier_by_dimension,
+        float noise_shaping_threshold)
+    : fixed_point_dataset_(std::move(fixed_point_dataset)),
+      noise_shaping_threshold_(noise_shaping_threshold) {
   DCHECK(fixed_point_dataset_ != nullptr);
   DCHECK_EQ(multiplier_by_dimension.size(),
             fixed_point_dataset_->dimensionality());
-  inverse_multipliers_.resize(multiplier_by_dimension.size());
+  vector<float> inverse_multipliers(multiplier_by_dimension.size());
   for (size_t i = 0; i < multiplier_by_dimension.size(); ++i) {
-    inverse_multipliers_[i] = 1.0f / multiplier_by_dimension[i];
+    inverse_multipliers[i] = 1.0f / multiplier_by_dimension[i];
   }
+  inverse_multipliers_ =
+      make_shared<vector<float>>(std::move(inverse_multipliers));
 }
 
 FixedPointFloatDenseDotProductReorderingHelper::
-    ~FixedPointFloatDenseDotProductReorderingHelper() {}
+    ~FixedPointFloatDenseDotProductReorderingHelper() = default;
+
+StatusOrPtr<SingleMachineSearcherBase<float>>
+FixedPointFloatDenseDotProductReorderingHelper::CreateBruteForceSearcher(
+    int32_t num_neighbors, float epsilon) const {
+  return ScalarQuantizedBruteForceSearcher::
+      CreateFromQuantizedDatasetAndInverseMultipliers(
+          make_unique<DotProductDistance>(), fixed_point_dataset_,
+          inverse_multipliers_, nullptr, num_neighbors, epsilon);
+}
 
 Status
 FixedPointFloatDenseDotProductReorderingHelper::ComputeDistancesForReordering(
     const DatapointPtr<float>& query, NNResultsVector* result) const {
   auto preprocessed = PrepareForAsymmetricScalarQuantizedDotProduct(
-      query, inverse_multipliers_);
+      query, *inverse_multipliers_);
   DenseDotProductDistanceOneToManyInt8Float(
       MakeDatapointPtr(preprocessed.get(), query.nonzero_entries()),
       *fixed_point_dataset_, MakeMutableSpan(*result));
@@ -369,14 +442,15 @@ FixedPointFloatDenseDotProductReorderingHelper::ComputeDistancesForReordering(
     const DatapointPtr<float>& query, NNResultsVector* result,
     CallbackFunctor* __restrict__ callback) const {
   auto preprocessed = PrepareForAsymmetricScalarQuantizedDotProduct(
-      query, inverse_multipliers_);
-  one_to_many_low_level::DenseDotProductDistanceOneToManyInt8FloatDispatch(
-      MakeDatapointPtr(preprocessed.get(), query.nonzero_entries()),
-      *fixed_point_dataset_, MakeMutableSpan(*result), callback);
+      query, *inverse_multipliers_);
+  auto view = DefaultDenseDatasetView<int8_t>(*fixed_point_dataset_);
+  one_to_many_low_level::DenseDotProductDistanceOneToManyInt8FloatLowLevel<
+      DenseDatasetView<int8_t>, false, DatapointIndex>(
+      preprocessed.get(), &view, nullptr, MakeMutableSpan(*result), callback);
   return OkStatus();
 }
 
-StatusOr<std::pair<DatapointIndex, float>>
+absl::StatusOr<std::pair<DatapointIndex, float>>
 FixedPointFloatDenseDotProductReorderingHelper::ComputeTop1ReorderingDistance(
     const DatapointPtr<float>& query, NNResultsVector* result) const {
   one_to_many_low_level::SetTop1Functor<std::pair<DatapointIndex, float>, float>
@@ -395,29 +469,74 @@ Status FixedPointFloatDenseDotProductReorderingHelper::Reconstruct(
 
   const auto* dp_start = (*fixed_point_dataset_)[i].values();
   std::transform(dp_start, dp_start + dimensionality(),
-                 inverse_multipliers_.begin(), output.begin(),
+                 inverse_multipliers_->begin(), output.begin(),
                  std::multiplies<float>());
   return OkStatus();
 }
 
+StatusOr<ReorderingInterface<float>::Mutator*>
+FixedPointFloatDenseDotProductReorderingHelper::GetMutator() const {
+  if (!mutator_) {
+    mutator_ = make_unique<Mutator>(
+        const_cast<FixedPointFloatDenseDotProductReorderingHelper*>(this));
+  }
+  return mutator_.get();
+}
+
+class FixedPointFloatDenseCosineReorderingHelper::Mutator final
+    : public ReorderingInterface<float>::Mutator {
+ public:
+  explicit Mutator(FixedPointFloatDenseCosineReorderingHelper* helper)
+      : dot_mut_(helper->dot_product_helper_.GetMutator().value()) {}
+
+  StatusOr<DatapointIndex> AddDatapoint(const DatapointPtr<float>& dptr) final {
+    auto normalized = Normalize(dptr);
+    return dot_mut_->AddDatapoint(normalized.ToPtr());
+  }
+  StatusOr<DatapointIndex> RemoveDatapoint(DatapointIndex idx) final {
+    return dot_mut_->RemoveDatapoint(idx);
+  }
+  Status UpdateDatapoint(const DatapointPtr<float>& dptr,
+                         DatapointIndex idx) final {
+    auto normalized = Normalize(dptr);
+    return dot_mut_->UpdateDatapoint(normalized.ToPtr(), idx);
+  }
+  void Reserve(DatapointIndex num_datapoints) final {
+    dot_mut_->Reserve(num_datapoints);
+  }
+
+ private:
+  Datapoint<float> Normalize(const DatapointPtr<float>& dptr) {
+    Datapoint<float> result;
+    CopyToDatapoint(dptr, &result);
+    NormalizeUnitL2(&result);
+    return result;
+  }
+
+  ReorderingInterface<float>::Mutator* dot_mut_ = nullptr;
+};
+
 FixedPointFloatDenseCosineReorderingHelper::
     FixedPointFloatDenseCosineReorderingHelper(
         const DenseDataset<float>& exact_reordering_dataset,
-        float fixed_point_multiplier_quantile)
+        float fixed_point_multiplier_quantile, float noise_shaping_threshold,
+        ThreadPool* pool)
     : dot_product_helper_(exact_reordering_dataset,
-                          fixed_point_multiplier_quantile) {
+                          fixed_point_multiplier_quantile,
+                          noise_shaping_threshold, pool) {
   DCHECK_EQ(exact_reordering_dataset.normalization(), UNITL2NORM);
 }
 
 FixedPointFloatDenseCosineReorderingHelper::
     FixedPointFloatDenseCosineReorderingHelper(
         shared_ptr<DenseDataset<int8_t>> fixed_point_dataset,
-        const vector<float>& multiplier_by_dimension)
+        absl::Span<const float> multiplier_by_dimension,
+        float noise_shaping_threshold)
     : dot_product_helper_(std::move(fixed_point_dataset),
-                          multiplier_by_dimension) {}
+                          multiplier_by_dimension, noise_shaping_threshold) {}
 
 FixedPointFloatDenseCosineReorderingHelper::
-    ~FixedPointFloatDenseCosineReorderingHelper() {}
+    ~FixedPointFloatDenseCosineReorderingHelper() = default;
 
 Status
 FixedPointFloatDenseCosineReorderingHelper::ComputeDistancesForReordering(
@@ -428,13 +547,33 @@ FixedPointFloatDenseCosineReorderingHelper::ComputeDistancesForReordering(
       query, result, &set_cosine_dist_functor);
 }
 
-StatusOr<std::pair<DatapointIndex, float>>
+absl::StatusOr<std::pair<DatapointIndex, float>>
 FixedPointFloatDenseCosineReorderingHelper::ComputeTop1ReorderingDistance(
     const DatapointPtr<float>& query, NNResultsVector* result) const {
   one_to_many_low_level::SetCosineTop1Functor set_cosine_top1_functor;
   SCANN_RETURN_IF_ERROR(dot_product_helper_.ComputeDistancesForReordering(
       query, result, &set_cosine_top1_functor));
   return set_cosine_top1_functor.Top1Pair(*result);
+}
+
+StatusOrPtr<SingleMachineSearcherBase<float>>
+FixedPointFloatDenseCosineReorderingHelper::CreateBruteForceSearcher(
+    int32_t num_neighbors, float epsilon) const {
+  return ScalarQuantizedBruteForceSearcher::
+      CreateFromQuantizedDatasetAndInverseMultipliers(
+          make_unique<CosineDistance>(),
+          dot_product_helper_.fixed_point_dataset_,
+          dot_product_helper_.inverse_multipliers_, nullptr, num_neighbors,
+          epsilon);
+}
+
+StatusOr<ReorderingInterface<float>::Mutator*>
+FixedPointFloatDenseCosineReorderingHelper::GetMutator() const {
+  if (!mutator_) {
+    mutator_ = make_unique<Mutator>(
+        const_cast<FixedPointFloatDenseCosineReorderingHelper*>(this));
+  }
+  return mutator_.get();
 }
 
 FixedPointFloatDenseSquaredL2ReorderingHelper::
@@ -456,7 +595,7 @@ FixedPointFloatDenseSquaredL2ReorderingHelper::
 FixedPointFloatDenseSquaredL2ReorderingHelper::
     FixedPointFloatDenseSquaredL2ReorderingHelper(
         shared_ptr<DenseDataset<int8_t>> fixed_point_dataset,
-        const vector<float>& multiplier_by_dimension,
+        absl::Span<const float> multiplier_by_dimension,
         shared_ptr<const vector<float>> squared_l2_norm_by_datapoint)
     : dot_product_helper_(std::move(fixed_point_dataset),
                           multiplier_by_dimension),
@@ -475,7 +614,7 @@ FixedPointFloatDenseSquaredL2ReorderingHelper::ComputeDistancesForReordering(
                                                            &set_sql2_dist);
 }
 
-StatusOr<std::pair<DatapointIndex, float>>
+absl::StatusOr<std::pair<DatapointIndex, float>>
 FixedPointFloatDenseSquaredL2ReorderingHelper::ComputeTop1ReorderingDistance(
     const DatapointPtr<float>& query, NNResultsVector* result) const {
   const float query_norm = SquaredL2Norm(query);
@@ -484,6 +623,18 @@ FixedPointFloatDenseSquaredL2ReorderingHelper::ComputeTop1ReorderingDistance(
   SCANN_RETURN_IF_ERROR(dot_product_helper_.ComputeDistancesForReordering(
       query, result, &set_sql2_top1));
   return set_sql2_top1.Top1Pair();
+}
+
+StatusOrPtr<SingleMachineSearcherBase<float>>
+FixedPointFloatDenseSquaredL2ReorderingHelper::CreateBruteForceSearcher(
+    int32_t num_neighbors, float epsilon) const {
+  return ScalarQuantizedBruteForceSearcher::
+      CreateFromQuantizedDatasetAndInverseMultipliers(
+          make_unique<SquaredL2Distance>(),
+          dot_product_helper_.fixed_point_dataset_,
+          dot_product_helper_.inverse_multipliers_,
+          std::const_pointer_cast<vector<float>>(database_squared_l2_norms_),
+          num_neighbors, epsilon);
 }
 
 FixedPointFloatDenseLimitedInnerReorderingHelper::
@@ -511,7 +662,7 @@ FixedPointFloatDenseLimitedInnerReorderingHelper::ComputeDistancesForReordering(
                                                            &set_limited_dist);
 }
 
-StatusOr<std::pair<DatapointIndex, float>>
+absl::StatusOr<std::pair<DatapointIndex, float>>
 FixedPointFloatDenseLimitedInnerReorderingHelper::ComputeTop1ReorderingDistance(
     const DatapointPtr<float>& query, NNResultsVector* result) const {
   const float inverse_query_norm = 1.0 / std::sqrt(SquaredL2Norm(query));
@@ -523,5 +674,17 @@ FixedPointFloatDenseLimitedInnerReorderingHelper::ComputeTop1ReorderingDistance(
 }
 
 SCANN_INSTANTIATE_TYPED_CLASS(, ExactReorderingHelper);
+
+template <typename T>
+StatusOrPtr<SingleMachineSearcherBase<T>>
+ReorderingHelper<T>::CreateBruteForceSearcher(int32_t num_neighbors,
+                                              float epsilon) const {
+  return UnimplementedError(
+      "CreateBruteForceSearcher not implemented for reordering helper of type "
+      "%s",
+      typeid(*this).name());
+}
+
+SCANN_INSTANTIATE_TYPED_CLASS(, ReorderingHelper);
 
 }  // namespace research_scann

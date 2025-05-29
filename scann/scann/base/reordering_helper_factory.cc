@@ -57,17 +57,19 @@ StatusOrHelper<float> BuildFixedPointReorderingHelper<float>(
     SCANN_RET_CHECK_EQ(
         opts->pre_quantized_fixed_point->fixed_point_dataset->dimensionality(),
         opts->pre_quantized_fixed_point->multiplier_by_dimension->size())
-            .SetErrorCode(error::INVALID_ARGUMENT)
+            .SetCode(absl::StatusCode::kInvalidArgument)
         << "Multipliers for pre-quantized FP8 reordering must be of the same "
            "dimensionality as the pre-quantized dataset.";
     if (distance_type == typeid(const DotProductDistance)) {
       return {make_unique<FixedPointFloatDenseDotProductReorderingHelper>(
           std::move(opts->pre_quantized_fixed_point->fixed_point_dataset),
-          *opts->pre_quantized_fixed_point->multiplier_by_dimension)};
+          *opts->pre_quantized_fixed_point->multiplier_by_dimension,
+          config.noise_shaping_threshold())};
     } else if (distance_type == typeid(const CosineDistance)) {
       return {make_unique<FixedPointFloatDenseCosineReorderingHelper>(
           std::move(opts->pre_quantized_fixed_point->fixed_point_dataset),
-          *opts->pre_quantized_fixed_point->multiplier_by_dimension)};
+          *opts->pre_quantized_fixed_point->multiplier_by_dimension,
+          config.noise_shaping_threshold())};
     } else if (distance_type == typeid(const SquaredL2Distance)) {
       return {make_unique<FixedPointFloatDenseSquaredL2ReorderingHelper>(
           std::move(opts->pre_quantized_fixed_point->fixed_point_dataset),
@@ -91,10 +93,12 @@ StatusOrHelper<float> BuildFixedPointReorderingHelper<float>(
         *down_cast<const DenseDataset<float>*>(dataset.get());
     if (distance_type == typeid(const DotProductDistance)) {
       return {make_unique<FixedPointFloatDenseDotProductReorderingHelper>(
-          dense_dataset, fp_quantile)};
+          dense_dataset, fp_quantile, config.noise_shaping_threshold(),
+          opts->parallelization_pool.get())};
     } else if (distance_type == typeid(const CosineDistance)) {
       return {make_unique<FixedPointFloatDenseCosineReorderingHelper>(
-          dense_dataset, fp_quantile)};
+          dense_dataset, fp_quantile, config.noise_shaping_threshold(),
+          opts->parallelization_pool.get())};
     } else if (distance_type == typeid(const SquaredL2Distance)) {
       return {make_unique<FixedPointFloatDenseSquaredL2ReorderingHelper>(
           dense_dataset, fp_quantile)};

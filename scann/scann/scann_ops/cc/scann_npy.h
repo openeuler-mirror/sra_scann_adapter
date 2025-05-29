@@ -22,12 +22,14 @@
 #include <string>
 #include <utility>
 
+#include "absl/synchronization/mutex.h"
 #include "absl/types/span.h"
 #include "pybind11/numpy.h"
 #include "pybind11/pybind11.h"
 #include "scann/base/single_machine_factory_options.h"
 #include "scann/data_format/dataset.h"
 #include "scann/scann_ops/cc/scann.h"
+#include "scann/utils/types.h"
 
 namespace research_scann {
 
@@ -41,6 +43,7 @@ class ScannNumpy {
              const std::string& scann_assets_pbtxt);
   ScannNumpy(const np_row_major_arr<float>& np_dataset,
              const std::string& config, int training_threads);
+  ScannNumpy(pybind11::array_t<uint8_t> np_data);
   std::pair<pybind11::array_t<DatapointIndex>, pybind11::array_t<float>> Search(
       const np_row_major_arr<float>& query, int final_nn, int pre_reorder_nn,
       int leaves);
@@ -48,9 +51,29 @@ class ScannNumpy {
   SearchBatched(const np_row_major_arr<float>& queries, int final_nn,
                 int pre_reorder_nn, int leaves, bool parallel = false,
                 int batch_size = 256);
-  void SearchAdditionalParams(float adp_threshold, int adp_refined, int leaves_to_search);
-  void Serialize(std::string path);
+  void Serialize(std::string path, bool relative_path = false);
+
+  pybind11::array_t<uint8_t> SerializeToNumpy();
+
+  vector<DatapointIndex> Upsert(
+      std::vector<std::optional<DatapointIndex>> indices,
+      std::vector<np_row_major_arr<float>>& vecs, int batch_size = 256);
+  vector<DatapointIndex> Delete(std::vector<DatapointIndex> indices);
+
+  int Rebalance(const string& config = "");
+
+  size_t Size() const;
+
   void SetNumThreads(int num_threads);
+
+  void Reserve(size_t num_datapoints);
+
+  string Config();
+
+  void SearchAdditionalParams(float adp_threshold, int adp_refined, int leaves_to_search);
+
+  int GetNum();
+  int GetDim();
 
  private:
   ScannInterface scann_;

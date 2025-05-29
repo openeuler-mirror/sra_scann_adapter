@@ -16,11 +16,14 @@
 
 #include <string>
 
+#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "scann/oss_wrappers/scann_status_builder.h"
 
 namespace research_scann {
 
-Status AnnotateStatus(const Status& s, absl::string_view msg) {
+absl::Status AnnotateStatus(const absl::Status& s, absl::string_view msg) {
   if (s.ok() || msg.empty()) return s;
 
   absl::string_view new_msg = msg;
@@ -29,7 +32,7 @@ Status AnnotateStatus(const Status& s, absl::string_view msg) {
     absl::StrAppend(&annotated, s.message(), "; ", msg);
     new_msg = annotated;
   }
-  return Status(s.code(), new_msg);
+  return absl::Status(s.code(), new_msg);
 }
 
 StatusBuilder RetCheckFail(absl::string_view msg) {
